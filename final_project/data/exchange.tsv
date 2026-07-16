@@ -1,0 +1,4 @@
+exchange_id	exchange_name	country	timezone
+1	New York Stock Exchange	US	America/New_York
+2	NASDAQ	US	America/New_York
+3	Chicago Board Options Exchange	US	America/Chicago

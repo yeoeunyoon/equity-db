@@ -1,0 +1,26 @@
+company_id	company_name	industry_id	country
+1	Apple Inc.	3	US
+2	Microsoft Corporation	1	US
+3	NVIDIA Corporation	2	US
+4	Alphabet Inc.	14	US
+5	Amazon.com Inc.	9	US
+6	Meta Platforms Inc.	14	US
+7	Tesla Inc.	10	US
+8	Johnson & Johnson	5	US
+9	JPMorgan Chase & Co.	7	US
+10	Exxon Mobil Corporation	11	US
+11	UnitedHealth Group Inc.	5	US
+12	Visa Inc.	8	US
+13	Procter & Gamble Co.	15	US
+14	Coca-Cola Company	16	US
+15	Pfizer Inc.	5	US
+16	Boeing Company	13	US
+17	Intel Corporation	2	US
+18	Salesforce Inc.	4	US
+19	McDonald's Corporation	20	US
+20	Netflix Inc.	14	US
+21	Advanced Micro Devices Inc.	2	US
+22	Broadcom Inc.	2	US
+23	Adobe Inc.	4	US
+24	Costco Wholesale Corp.	9	US
+25	Berkshire Hathaway Inc.	7	US

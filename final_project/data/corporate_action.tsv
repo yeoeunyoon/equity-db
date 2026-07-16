@@ -1,0 +1,17 @@
+action_id	security_id	action_date	action_type	amount
+1	1	2025-02-10	dividend	0.25
+2	2	2025-02-20	dividend	0.83
+3	3	2025-03-12	dividend	0.01
+4	4	2025-03-10	dividend	0.2
+5	6	2025-03-14	dividend	0.525
+6	8	2025-02-18	dividend	1.24
+7	9	2025-01-06	dividend	1.25
+8	10	2025-02-12	dividend	0.99
+9	11	2025-03-10	dividend	2.1
+10	12	2025-02-11	dividend	0.59
+11	13	2025-01-24	dividend	1.007
+12	14	2025-03-14	dividend	0.51
+13	15	2025-01-24	dividend	0.43
+14	19	2025-03-03	dividend	1.77
+15	22	2025-03-20	dividend	0.59
+16	24	2025-02-07	dividend	1.16

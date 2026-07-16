@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Market Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; font-size: 13px; background: #fff; color: #111; }
+.shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+.sidebar { border-right: 1px solid #ddd; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
+.mode-tabs { display: flex; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+.mode-tab { flex: 1; padding: 7px 4px; text-align: center; cursor: pointer; border: none; background: none; font-size: 12px; color: #555; border-right: 1px solid #ddd; }
+.mode-tab:last-child { border-right: none; }
+.mode-tab.active { background: #111; color: #fff; }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+select, input[type=text] { width: 100%; padding: 5px 7px; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; color: #111; background: #fff; outline: none; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 0l4 4 4-4z' fill='%23999'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 22px; cursor: pointer; }
+select:focus, input:focus { border-color: #111; }
+input[type=text] { text-transform: uppercase; }
+input::placeholder { text-transform: none; color: #bbb; }
+.range-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.rpill { font-size: 11px; padding: 3px 8px; border: 1px solid #ddd; border-radius: 3px; background: none; color: #555; cursor: pointer; }
+.rpill.active { background: #111; border-color: #111; color: #fff; }
+.divider { height: 1px; background: #eee; margin: 2px 0; }
+.query-list { display: flex; flex-direction: column; gap: 1px; }
+.qitem { padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 12px; color: #444; border: 1px solid transparent; line-height: 1.35; }
+.qitem:hover { background: #f0f0f0; }
+.qitem.active { background: #f0f0f0; border-color: #ddd; color: #111; font-weight: 500; }
+.run-btn { width: 100%; padding: 7px; background: #111; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer; margin-top: 2px; }
+.run-btn:hover { background: #333; }
+.run-btn:disabled { background: #bbb; cursor: not-allowed; }
+.main { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.empty { display: flex; align-items: center; justify-content: center; min-height: 60vh; color: #ccc; font-size: 13px; }
+.sql-block { border: 1px solid #eee; border-radius: 3px; overflow: hidden; }
+.sql-header { display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #fafafa; border-bottom: 1px solid #eee; }
+.sql-header span { font-size: 11px; color: #aaa; }
+.sql-toggle { font-size: 11px; color: #888; background: none; border: none; cursor: pointer; }
+.sql-code { font-family: monospace; font-size: 11px; line-height: 1.7; color: #444; padding: 10px; white-space: pre-wrap; display: none; background: #fafafa; max-height: 200px; overflow-y: auto; }
+.sql-code.open { display: block; }
+.kw { color: #7c3aed; } .fn { color: #2563eb; } .str { color: #059669; } .num { color: #d97706; } .cm { color: #9ca3af; font-style: italic; }
+.rcard { border: 1px solid #eee; border-radius: 3px; overflow: hidden; }
+.rcard-bar { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: #fafafa; border-bottom: 1px solid #eee; }
+.rcard-title { font-size: 11px; color: #888; flex: 1; }
+.vcbtn { font-size: 11px; padding: 3px 10px; border: 1px solid #ddd; border-radius: 3px; background: none; color: #555; cursor: pointer; }
+.vcbtn.active { background: #111; border-color: #111; color: #fff; }
+.row-count { font-size: 11px; color: #bbb; }
+.loading { display: none; align-items: center; gap: 8px; padding: 32px; color: #bbb; font-size: 12px; justify-content: center; }
+.loading.on { display: flex; }
+.spinner { width: 14px; height: 14px; border: 2px solid #eee; border-top-color: #111; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tscroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { text-align: left; padding: 7px 12px; background: #fafafa; color: #888; font-size: 11px; border-bottom: 1px solid #eee; font-weight: 400; white-space: nowrap; }
+thead th.r { text-align: right; }
+tbody td { padding: 6px 12px; border-bottom: 1px solid #f5f5f5; color: #333; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #fafafa; }
+.td-r { text-align: right; font-variant-numeric: tabular-nums; }
+.td-hl { font-weight: 500; color: #111; }
+.td-pos { color: #059669; } .td-neg { color: #dc2626; }
+.td-dim { color: #ccc; font-size: 11px; }
+.cpill { display: inline-block; padding: 1px 6px; border-radius: 2px; font-size: 11px; }
+.cp-call { background: #f0fdf4; color: #166534; }
+.cp-put  { background: #fef2f2; color: #991b1b; }
+.chart-wrap { padding: 16px; display: none; }
+.chart-wrap.on { display: block; }
+.chart-canvas { position: relative; height: 280px; }
+.init-loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(255,255,255,.95); color: #888; font-size: 13px; z-index: 9999; }
+.init-loader.off { display: none; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="mode-tabs">
+      <button class="mode-tab active" onclick="setMode('stock')" id="tab-stock">Stock</button>
+      <button class="mode-tab" onclick="setMode('sector')" id="tab-sector">Sector</button>
+    </div>
+    <div id="ctrl-area"></div>
+  </aside>
+  <main class="main">
+    <div class="empty" id="empty">Select an analysis from the left panel.</div>
+    <div id="result-root" style="display:none;flex-direction:column;gap:14px;"></div>
+  </main>
+</div>
+<div class="init-loader" id="init-loader"><div class="spinner"></div>Connecting&hellip;</div>
+
+<script>
+let curMode='stock', curQid=null, curData=null, chartInst=null, curRange='1y';
+let SECTORS = ['Technology','Healthcare','Financial Services','Consumer Discretionary',
+               'Energy','Industrials','Communication Services','Consumer Staples',
+               'Utilities','Real Estate','Materials'];
+const RANGE_DAYS = {'3m':90,'6m':180,'1y':365,'3y':1095,'5y':1825};
+
+// helpers
+const fmt  = (n,d=2) => n==null?'':Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtI = n => n==null?'':Math.round(n).toLocaleString('en-US');
+const sgn  = (n,d=2) => n==null?'':(n>=0?'+':'')+fmt(n,d);
+const gv   = id => { const el=document.getElementById('ctrl-'+id); return el?el.value.trim():''; };
+const tick = () => (gv('ticker')||'AAPL').toUpperCase();
+const sec  = () => gv('sector');
+
+function getRange() {
+  const end = new Date().toISOString().slice(0,10);
+  const d = new Date(); d.setDate(d.getDate()-(RANGE_DAYS[curRange]||365));
+  return { start: d.toISOString().slice(0,10), end };
+}
+
+async function api(q, extra={}) {
+  const {start,end} = getRange();
+  const res = await fetch('api.php?'+new URLSearchParams({q,start,end,...extra}));
+  const j = await res.json();
+  if (j.error) throw new Error(j.error);
+  return j.rows||[];
+}
+
+function hl(s) {
+  const KW = 'SELECT|FROM|LEFT JOIN|JOIN|WHERE|AND|OR|ON|GROUP BY|ORDER BY|HAVING|AS|CASE|WHEN|THEN|ELSE|END|WITH|OVER|PARTITION BY|ROWS BETWEEN|PRECEDING|CURRENT ROW|DISTINCT|LIMIT|IS NOT NULL|IS NULL|NOT|BETWEEN|INTERVAL|YEAR';
+  const FN = 'COUNT|SUM|AVG|MIN|MAX|ROUND|LAG|STDDEV_SAMP|SQRT|DATE_SUB|DATE_ADD|CURDATE';
+  return s
+    .replace(/--.*/g,          m=>`<span class="cm">${m}</span>`)
+    .replace(/'[^']*'/g,       m=>`<span class="str">${m}</span>`)
+    .replace(new RegExp(`\\b(${FN})\\b`,'gi'), m=>`<span class="fn">${m}</span>`)
+    .replace(new RegExp(`(${KW})`,'gi'),       m=>`<span class="kw">${m.toUpperCase()}</span>`)
+    .replace(/\b(\d+(\.\d+)?)\b/g,            m=>`<span class="num">${m}</span>`);
+}
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+const Q = {
+
+  s1: { mode:'stock', label:'Daily close & return', hasChart:true,
+    sql:`-- Q01: daily close price and return
+SELECT p.trade_date, p.close,
+  ROUND((p.close - LAG(p.close) OVER (ORDER BY p.trade_date))
+        / LAG(p.close) OVER (ORDER BY p.trade_date) * 100, 3) AS daily_return_pct
+FROM Price p JOIN Security s ON p.security_id = s.security_id
+WHERE s.ticker = :ticker AND p.trade_date BETWEEN :start AND :end
+ORDER BY p.trade_date;`,
+    run: async () => {
+      const rows = await api('s1', {ticker:tick()});
+      let prev = null;
+      return rows.map(r => {
+        const c = +r.close, ret = prev!=null ? (c-prev)/prev*100 : null;
+        prev = c;
+        return {Date:r.trade_date, Close:'$'+fmt(c), 'Return %':sgn(ret,3)};
+      });
+    },
+    chart: d => line(['Close'],[d.map(r=>+r.Close.slice(1).replace(/,/g,''))],d.map(r=>r.Date),['#111'])
+  },
+
+  s2: { mode:'stock', label:'30-day rolling annualized volatility', hasChart:true,
+    sql:`-- Q02: 30-day rolling annualized volatility (x sqrt(252))
+WITH daily AS (
+  SELECT p.trade_date,
+    (p.close - LAG(p.close) OVER (ORDER BY p.trade_date))
+    / LAG(p.close) OVER (ORDER BY p.trade_date) AS ret
+  FROM Price p JOIN Security s ON p.security_id = s.security_id
+  WHERE s.ticker = :ticker AND p.trade_date BETWEEN :start AND :end
+)
+SELECT trade_date,
+  ROUND(STDDEV_SAMP(ret) OVER (ORDER BY trade_date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)
+        * SQRT(252) * 100, 2) AS ann_vol_pct
+FROM daily WHERE ret IS NOT NULL;`,
+    run: async () => {
+      const rows = await api('s2', {ticker:tick()});
+      return rows.map(r => ({Date:r.trade_date, 'Ann. Vol %':r.ann_vol_pct==null?'':fmt(+r.ann_vol_pct)}));
+    },
+    chart: d => line(['Ann. Vol %'],[d.map(r=>r['Ann. Vol %']===''?null:+r['Ann. Vol %'].replace(/,/g,''))],d.map(r=>r.Date),['#dc2626'])
+  },
+
+  s3: { mode:'stock', label:'Options chain IV by expiration', hasChart:true,
+    sql:`-- Q03: avg implied volatility across option contracts by expiration and type
+SELECT oc.expiration_date, oc.option_type,
+  ROUND(AVG(oc.implied_volatility) * 100, 2) AS avg_iv_pct,
+  SUM(oc.open_interest) AS total_oi, COUNT(*) AS contracts
+FROM Option_Contract oc JOIN Security s ON oc.security_id = s.security_id
+WHERE s.ticker = :ticker AND oc.expiration_date >= CURDATE()
+GROUP BY oc.expiration_date, oc.option_type
+ORDER BY oc.expiration_date, oc.option_type;`,
+    run: async () => {
+      const rows = await api('s3', {ticker:tick()});
+      return rows.map(r => ({Expiry:r.expiration_date, Type:r.option_type,
+        'Avg IV %':fmt(+r.avg_iv_pct), 'Total OI':fmtI(+r.total_oi), Contracts:r.contracts}));
+    },
+    chart: d => {
+      const exps = [...new Set(d.map(r=>r.Expiry))];
+      line(['Calls IV %','Puts IV %'],
+        [exps.map(e=>{const r=d.find(x=>x.Expiry===e&&x.Type==='call');return r?+r['Avg IV %'].replace(/,/g,''):null;}),
+         exps.map(e=>{const r=d.find(x=>x.Expiry===e&&x.Type==='put'); return r?+r['Avg IV %'].replace(/,/g,''):null;})],
+        exps, ['#059669','#dc2626']);
+    }
+  },
+
+  s4: { mode:'stock', label:'Corporate actions with price impact', hasChart:false,
+    sql:`-- Q04: corporate actions with price 7 days before and after
+SELECT ca.action_date, ca.action_type, ca.amount,
+  p_on.close AS price_on_date, p_pre.close AS price_7d_before,
+  p_aft.close AS price_7d_after,
+  ROUND((p_on.close-p_pre.close)/p_pre.close*100,2) AS chg_pre_pct,
+  ROUND((p_aft.close-p_on.close)/p_on.close*100,2)  AS chg_aft_pct
+FROM Corporate_Action ca JOIN Security s ON ca.security_id = s.security_id
+LEFT JOIN Price p_on  ON ... (closest date <= action_date)
+LEFT JOIN Price p_pre ON ... (closest date <= action_date - 7 days)
+LEFT JOIN Price p_aft ON ... (closest date >= action_date + 7 days)
+WHERE s.ticker = :ticker ORDER BY ca.action_date DESC;`,
+    run: async () => {
+      const rows = await api('s4', {ticker:tick()});
+      return rows.map(r => ({
+        Date:r.action_date, Type:r.action_type,
+        Amount:   r.amount!=null?'$'+fmt(+r.amount):'-',
+        'On Day': r.price_on_date!=null?'$'+fmt(+r.price_on_date):'-',
+        '7d Before':r.price_7d_before!=null?'$'+fmt(+r.price_7d_before):'-',
+        '7d After': r.price_7d_after!=null?'$'+fmt(+r.price_7d_after):'-',
+        'Pre %':r.chg_pre_pct!=null?sgn(+r.chg_pre_pct):'',
+        'Post %':r.chg_aft_pct!=null?sgn(+r.chg_aft_pct):''
+      }));
+    }
+  },
+
+  s5: { mode:'stock', label:'Stock return vs SPY', hasChart:true,
+    sql:`-- Q05: total return for stock vs SPY over date range
+SELECT
+  ROUND((s_end.close-s_start.close)/s_start.close*100,2) AS stock_return_pct,
+  ROUND((spy_end.close-spy_start.close)/spy_start.close*100,2) AS spy_return_pct,
+  ROUND(stock_return_pct - spy_return_pct, 2) AS excess_return_pct
+FROM Security sec
+JOIN Price s_start ON ... (first price >= :start)
+JOIN Price s_end   ON ... (last  price <= :end)
+JOIN Security spy ON spy.ticker = 'SPY'
+JOIN Price spy_start, spy_end ON ...
+WHERE sec.ticker = :ticker;`,
+    run: async () => {
+      const t = tick();
+      const rows = await api('s5', {ticker:t});
+      if (!rows.length) return [];
+      const r = rows[0];
+      const sr = r.stock_return_pct!=null?+r.stock_return_pct:null;
+      const sp = r.spy_return_pct!=null?+r.spy_return_pct:null;
+      const ex = r.excess_return_pct!=null?+r.excess_return_pct:null;
+      return [
+        {Metric:t+' Return %',  Value:sgn(sr)+'%', _v:sr},
+        {Metric:'SPY Return %', Value:sgn(sp)+'%', _v:sp},
+        {Metric:'Excess %',     Value:sgn(ex)+'%', _v:ex}
+      ];
+    },
+    chart: d => bar(d.map(r=>r.Metric),d.map(r=>r._v??0),'Return %',
+      d.map(r=>(r._v??0)>=0?'rgba(5,150,105,.6)':'rgba(220,38,38,.5)'))
+  },
+
+  s6: { mode:'stock', label:'Financial snapshot trend', hasChart:true,
+    sql:`-- Q06: P/E, EPS, beta, market cap over time for a given stock
+SELECT fs.snapshot_date, fs.pe_ratio, fs.eps, fs.beta,
+  ROUND(fs.market_cap/1e9,2) AS market_cap_b
+FROM Financial_Snapshot fs JOIN Security s ON fs.security_id = s.security_id
+WHERE s.ticker = :ticker ORDER BY fs.snapshot_date;`,
+    run: async () => {
+      const rows = await api('s6', {ticker:tick()});
+      return rows.map(r => ({'Snapshot Date':r.snapshot_date,
+        'P/E':r.pe_ratio!=null?fmt(+r.pe_ratio):'-',
+        'EPS':r.eps!=null?'$'+fmt(+r.eps):'-',
+        'Beta':r.beta!=null?fmt(+r.beta,3):'-',
+        'Mkt Cap ($B)':r.market_cap_b!=null?fmt(+r.market_cap_b):'-'}));
+    },
+    chart: d => line(['P/E','Beta'],
+      [d.map(r=>r['P/E']==='-'?null:+r['P/E'].replace(/,/g,'')),
+       d.map(r=>r.Beta==='-'?null:+r.Beta.replace(/,/g,''))],
+      d.map(r=>r['Snapshot Date']),['#2563eb','#d97706'])
+  },
+
+  r1: { mode:'sector', label:'Sector returns vs SPY', hasChart:true,
+    sql:`-- Q07: average stock return per sector vs SPY over a date range
+SELECT sec_t.sector_name,
+  ROUND(AVG((p_end.close-p_start.close)/p_start.close*100),2) AS sector_return_pct,
+  ROUND((spy_end.close-spy_start.close)/spy_start.close*100,2) AS spy_return_pct,
+  ROUND(sector_return_pct - spy_return_pct, 2) AS relative_pct
+FROM Sector sec_t JOIN Industry ... JOIN Company ... JOIN Stock ... JOIN Security ...
+JOIN Price p_start ON ... (first price >= :start)
+JOIN Price p_end   ON ... (last  price <= :end)
+JOIN Security spy ON spy.ticker = 'SPY' JOIN Price spy_start, spy_end ON ...
+GROUP BY sec_t.sector_name ORDER BY relative_pct DESC;`,
+    run: async () => {
+      const rows = await api('r1');
+      return rows.map(r => ({Sector:r.sector_name,
+        'Return %':+r.sector_return_pct, 'SPY %':+r.spy_return_pct, 'Relative %':+r.relative_pct}));
+    },
+    chart: d => {
+      const spyV = d.length?d[0]['SPY %']:0, v=d.map(r=>r['Return %']);
+      bar(d.map(r=>r.Sector),v,'Return %',
+        v.map(x=>x>=spyV?'rgba(5,150,105,.6)':'rgba(220,38,38,.5)'),
+        [{label:'SPY',data:d.map(()=>spyV),type:'line',borderColor:'#999',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false}]);
+    }
+  },
+
+  r2: { mode:'sector', label:'Avg trailing P/E by industry', hasChart:true,
+    sql:`-- Q08: avg trailing P/E per industry in a sector, filtered by min market cap
+SELECT i.industry_name, ROUND(AVG(fs.pe_ratio),2) AS avg_pe,
+  COUNT(DISTINCT c.company_id) AS companies
+FROM Financial_Snapshot fs JOIN Stock ... JOIN Company ... JOIN Industry ... JOIN Sector ...
+WHERE sec.sector_name = :sector AND fs.pe_ratio > 0
+  AND fs.snapshot_date = (SELECT MAX(snapshot_date) FROM Financial_Snapshot WHERE security_id = fs.security_id)
+GROUP BY i.industry_name ORDER BY avg_pe DESC;`,
+    run: async () => {
+      const rows = await api('r2', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Industry:r.industry_name, 'Avg P/E':fmt(+r.avg_pe), Companies:+r.companies}));
+    },
+    chart: d => bar(d.map(r=>r.Industry),d.map(r=>+r['Avg P/E'].replace(/,/g,'')),'Avg P/E','rgba(37,99,235,.5)',[],true)
+  },
+
+  r3: { mode:'sector', label:'Consecutive EPS growth companies', hasChart:true,
+    sql:`-- Q09: companies with >= N consecutive EPS growth quarters
+WITH eps_lag AS (
+  SELECT st.company_id, fs.snapshot_date, fs.eps,
+    LAG(fs.eps) OVER (PARTITION BY st.company_id ORDER BY fs.snapshot_date) AS prev_eps
+  FROM Financial_Snapshot fs JOIN Stock st ON fs.security_id = st.security_id
+),
+streaks AS (
+  SELECT company_id,
+    SUM(CASE WHEN eps > prev_eps THEN 1 ELSE 0 END)
+      OVER (PARTITION BY company_id ORDER BY snapshot_date ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS streak_val
+  FROM eps_lag WHERE prev_eps IS NOT NULL
+)
+SELECT c.company_name, sec.sector_name, MAX(streak_val) AS consecutive_qtrs
+FROM streaks s JOIN Company c ... JOIN Sector sec ...
+WHERE streak_val >= :min_q AND (:sector = 'ALL' OR sec.sector_name = :sector)
+GROUP BY c.company_name, sec.sector_name ORDER BY consecutive_qtrs DESC;`,
+    run: async () => {
+      const rows = await api('r3', {sector:sec()||'ALL', min_q:gv('min_q')||'4'});
+      return rows.map((r,i) => ({'#':i+1, Company:r.company_name, Sector:r.sector_name, 'Consec. Qtrs':+r.consecutive_qtrs}));
+    },
+    chart: d => bar(d.map(r=>r.Company.split(' ')[0]),d.map(r=>r['Consec. Qtrs']),'Consecutive Qtrs','rgba(5,150,105,.6)')
+  },
+
+  r4: { mode:'sector', label:'Top 10 most volatile stocks', hasChart:true,
+    sql:`-- Q10: top 10 stocks by annualized volatility within a sector
+WITH daily_ret AS (
+  SELECT p.security_id,
+    (p.close - LAG(p.close) OVER (PARTITION BY p.security_id ORDER BY p.trade_date))
+    / LAG(p.close) OVER (PARTITION BY p.security_id ORDER BY p.trade_date) AS ret
+  FROM Price p WHERE p.trade_date BETWEEN :start AND :end
+)
+SELECT s.ticker, c.company_name,
+  ROUND(STDDEV_SAMP(dr.ret) * SQRT(252) * 100, 2) AS ann_vol_pct
+FROM daily_ret dr JOIN Security s ... JOIN Sector sec ...
+WHERE sec.sector_name = :sector AND dr.ret IS NOT NULL
+GROUP BY s.ticker, c.company_name ORDER BY ann_vol_pct DESC LIMIT 10;`,
+    run: async () => {
+      const rows = await api('r4', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Ticker:r.ticker, Company:r.company_name, 'Ann. Vol %':fmt(+r.ann_vol_pct)}));
+    },
+    chart: d => bar(d.map(r=>r.Ticker),d.map(r=>+r['Ann. Vol %'].replace(/,/g,'')),'Ann. Vol %','rgba(220,38,38,.5)',[],true)
+  },
+
+  r5: { mode:'sector', label:'Companies below industry avg P/E', hasChart:true,
+    sql:`-- Q11: fraction of companies per industry trading below the industry avg P/E
+SELECT i.industry_name, ROUND(AVG(fs.pe_ratio),1) AS avg_pe, COUNT(*) AS total_companies,
+  ROUND(SUM(CASE WHEN fs.pe_ratio < (SELECT AVG(...) FROM ... WHERE industry = i) THEN 1.0 ELSE 0 END)
+        / COUNT(*) * 100, 1) AS pct_below_avg
+FROM Financial_Snapshot fs JOIN Stock ... JOIN Company ... JOIN Industry ...
+WHERE fs.pe_ratio > 0
+  AND fs.snapshot_date = (SELECT MAX(snapshot_date) FROM Financial_Snapshot WHERE security_id = fs.security_id)
+GROUP BY i.industry_name ORDER BY pct_below_avg DESC;`,
+    run: async () => {
+      const rows = await api('r5');
+      return rows.map((r,i) => ({'#':i+1, Industry:r.industry_name,
+        'Avg P/E':fmt(+r.avg_pe,1), 'Total Cos':+r.total_companies, '% Below Avg':fmt(+r.pct_below_avg,1)}));
+    },
+    chart: d => bar(d.map(r=>r.Industry),d.map(r=>+r['% Below Avg'].replace(/,/g,'')),'% Below Avg P/E','rgba(217,119,6,.5)',[],true)
+  },
+
+  r6: { mode:'sector', label:'Top dividend yield stocks', hasChart:true,
+    sql:`-- Q12: highest dividend yield stocks in a sector (past-year dividends / latest close)
+WITH div_12m AS (
+  SELECT security_id, SUM(amount) AS annual_dividends
+  FROM Corporate_Action
+  WHERE action_type = 'dividend' AND action_date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
+  GROUP BY security_id HAVING SUM(amount) > 0
+)
+SELECT c.company_name, s.ticker,
+  ROUND(d.annual_dividends / lp.close * 100, 2) AS div_yield_pct,
+  ROUND(d.annual_dividends, 3) AS total_div_paid,
+  ROUND(lp.close, 2) AS latest_close
+FROM div_12m d JOIN ... JOIN Sector sec ...
+WHERE sec.sector_name = :sector ORDER BY div_yield_pct DESC LIMIT 15;`,
+    run: async () => {
+      const rows = await api('r6', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Ticker:r.ticker, Company:r.company_name,
+        'Div Yield %':fmt(+r.div_yield_pct), 'Div Paid $':fmt(+r.total_div_paid,3),
+        'Latest Close':'$'+fmt(+r.latest_close)}));
+    },
+    chart: d => bar(d.map(r=>r.Ticker),d.map(r=>+r['Div Yield %'].replace(/,/g,'')),'Dividend Yield %','rgba(5,150,105,.6)')
+  },
+
+  r7: { mode:'sector', label:'Market cap distribution', hasChart:true,
+    sql:`-- Q13: market cap distribution by tier within a sector
+SELECT c.company_name, s.ticker, i.industry_name,
+  ROUND(fs.market_cap/1e9,1) AS mkt_cap_b,
+  CASE WHEN fs.market_cap>=200e9 THEN 'Mega Cap (>=200B)'
+       WHEN fs.market_cap>=10e9  THEN 'Large Cap (10-200B)'
+       WHEN fs.market_cap>=2e9   THEN 'Mid Cap (2-10B)'
+       ELSE 'Small Cap (<2B)' END AS cap_tier
+FROM Financial_Snapshot fs JOIN ... JOIN Sector sec ...
+WHERE sec.sector_name = :sector AND fs.market_cap IS NOT NULL
+  AND fs.snapshot_date = (SELECT MAX(snapshot_date) FROM Financial_Snapshot WHERE security_id = fs.security_id)
+ORDER BY fs.market_cap DESC;`,
+    run: async () => {
+      const rows = await api('r7', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Ticker:r.ticker, Company:r.company_name,
+        Industry:r.industry_name, 'Mkt Cap $B':fmt(+r.mkt_cap_b), Tier:r.cap_tier}));
+    },
+    chart: d => bar(d.map(r=>r.Ticker),d.map(r=>+r['Mkt Cap $B'].replace(/,/g,'')),'Market Cap ($B)',
+      d.map(r=>+r['Mkt Cap $B'].replace(/,/g,'')>=200?'rgba(37,99,235,.6)':'rgba(5,150,105,.5)'))
+  },
+
+  r8: { mode:'sector', label:'Avg beta by industry', hasChart:true,
+    sql:`-- Q14: avg, min, max beta by industry within a sector (latest snapshot)
+SELECT i.industry_name, ROUND(AVG(fs.beta),3) AS avg_beta,
+  ROUND(MIN(fs.beta),3) AS min_beta, ROUND(MAX(fs.beta),3) AS max_beta,
+  COUNT(DISTINCT c.company_id) AS companies
+FROM Financial_Snapshot fs JOIN ... JOIN Sector sec ...
+WHERE sec.sector_name = :sector AND fs.beta IS NOT NULL
+  AND fs.snapshot_date = (SELECT MAX(snapshot_date) FROM Financial_Snapshot WHERE security_id = fs.security_id)
+GROUP BY i.industry_name ORDER BY avg_beta DESC;`,
+    run: async () => {
+      const rows = await api('r8', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Industry:r.industry_name,
+        'Avg Beta':fmt(+r.avg_beta,3), 'Min Beta':fmt(+r.min_beta,3),
+        'Max Beta':fmt(+r.max_beta,3), Companies:+r.companies}));
+    },
+    chart: d => bar(d.map(r=>r.Industry),d.map(r=>+r['Avg Beta'].replace(/,/g,'')),'Avg Beta','rgba(124,58,237,.5)',[],true)
+  },
+
+  r9: { mode:'sector', label:'Top 10 volume leaders', hasChart:true,
+    sql:`-- Q15: top 10 stocks by avg daily volume in a sector over a date range
+SELECT s.ticker, c.company_name, i.industry_name,
+  ROUND(AVG(p.volume),0) AS avg_daily_vol,
+  ROUND(AVG(p.close),2)  AS avg_close
+FROM Price p JOIN Security s ... JOIN Sector sec ...
+WHERE sec.sector_name = :sector AND p.trade_date BETWEEN :start AND :end
+GROUP BY s.ticker, c.company_name, i.industry_name
+ORDER BY avg_daily_vol DESC LIMIT 10;`,
+    run: async () => {
+      const rows = await api('r9', {sector:sec()});
+      return rows.map((r,i) => ({'#':i+1, Ticker:r.ticker, Company:r.company_name,
+        Industry:r.industry_name, 'Avg Daily Vol':fmtI(+r.avg_daily_vol),
+        'Avg Close':'$'+fmt(+r.avg_close)}));
+    },
+    chart: d => bar(d.map(r=>r.Ticker),
+      d.map(r=>+r['Avg Daily Vol'].replace(/,/g,'')/1e6),'Avg Daily Vol (M)','rgba(37,99,235,.5)')
+  },
+};
+
+// ── UI Templates ─────────────────────────────────────────────────────────────
+function stockCtrl() {
+  return `
+    <div class="ctrl-group"><div class="ctrl-label">Ticker</div>
+      <input type="text" id="ctrl-ticker" placeholder="e.g. AAPL" value="AAPL"></div>
+    <div class="ctrl-group"><div class="ctrl-label">Date Range</div>
+      <div class="range-pills">
+        <button class="rpill" onclick="setRange('3m',this)">3M</button>
+        <button class="rpill" onclick="setRange('6m',this)">6M</button>
+        <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
+        <button class="rpill" onclick="setRange('3y',this)">3Y</button>
+        <button class="rpill" onclick="setRange('5y',this)">5Y</button>
+      </div></div>
+    <div class="divider"></div>
+    <div class="ctrl-label">Analysis</div>
+    <div class="query-list" id="qlist"></div>
+    <button class="run-btn" onclick="runQuery()">Run</button>`;
+}
+function sectorCtrl() {
+  return `
+    <div class="ctrl-group"><div class="ctrl-label">Sector</div>
+      <select id="ctrl-sector">${SECTORS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+    <div class="ctrl-group"><div class="ctrl-label">Min EPS Growth Qtrs</div>
+      <select id="ctrl-min_q">
+        <option value="4" selected>4</option><option value="5">5</option>
+        <option value="6">6</option><option value="7">7</option>
+      </select></div>
+    <div class="ctrl-group"><div class="ctrl-label">Date Range</div>
+      <div class="range-pills">
+        <button class="rpill" onclick="setRange('6m',this)">6M</button>
+        <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
+        <button class="rpill" onclick="setRange('3y',this)">3Y</button>
+        <button class="rpill" onclick="setRange('5y',this)">5Y</button>
+      </div></div>
+    <div class="divider"></div>
+    <div class="ctrl-label">Analysis</div>
+    <div class="query-list" id="qlist"></div>
+    <button class="run-btn" onclick="runQuery()">Run</button>`;
+}
+const MODES = {
+  stock:  {keys:['s1','s2','s3','s4','s5','s6'],           ctrl:stockCtrl},
+  sector: {keys:['r1','r2','r3','r4','r5','r6','r7','r8','r9'], ctrl:sectorCtrl}
+};
+
+function setMode(m) {
+  curMode=m; curQid=null;
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+m).classList.add('active');
+  document.getElementById('ctrl-area').innerHTML = MODES[m].ctrl();
+  const keys = MODES[m].keys;
+  document.getElementById('qlist').innerHTML = keys.map(k=>
+    `<div class="qitem" id="qi-${k}" onclick="selQ('${k}')">${Q[k].label}</div>`).join('');
+  selQ(keys[0]);
+}
+
+function selQ(k) {
+  curQid=k;
+  document.querySelectorAll('.qitem').forEach(e=>e.classList.remove('active'));
+  document.getElementById('qi-'+k)?.classList.add('active');
+}
+
+function setRange(r,btn) {
+  curRange=r;
+  btn.closest('.range-pills').querySelectorAll('.rpill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function runQuery() {
+  if (!curQid) return;
+  const q = Q[curQid];
+  const btn = document.querySelector('.run-btn');
+  if (btn) btn.disabled = true;
+
+  document.getElementById('empty').style.display = 'none';
+  const root = document.getElementById('result-root');
+  root.style.display = 'flex';
+  root.innerHTML = `
+    <div class="sql-block">
+      <div class="sql-header"><span>SQL</span>
+        <button class="sql-toggle" id="stbtn" onclick="toggleSql()">show</button></div>
+      <pre class="sql-code" id="scode">${hl(q.sql)}</pre>
+    </div>
+    <div class="rcard">
+      <div class="rcard-bar">
+        <span class="rcard-title" id="rcard-title"></span>
+        <div>
+          <button class="vcbtn active" id="vbtn-table" onclick="switchView('table')">Table</button>
+          <button class="vcbtn" id="vbtn-chart" onclick="switchView('chart')" ${q.hasChart?'':'style="display:none"'}>Chart</button>
+        </div>
+        <span class="row-count" id="rcount"></span>
+      </div>
+      <div class="loading on" id="loading"><div class="spinner"></div>Querying database…</div>
+      <div id="tarea" class="tscroll" style="display:none;"></div>
+      <div class="chart-wrap" id="carea"><canvas id="ccanvas" class="chart-canvas"></canvas></div>
+    </div>`;
+
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
+
+  try {
+    curData = await q.run() || [];
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loading').classList.remove('on');
+    document.getElementById('tarea').innerHTML =
+      `<div style="padding:24px;color:#dc2626;font-size:12px;">Error: ${e.message}</div>`;
+    document.getElementById('tarea').style.display='block';
+    if (btn) btn.disabled=false;
+    return;
+  }
+
+  document.getElementById('loading').classList.remove('on');
+  renderTable(curData);
+  document.getElementById('rcount').textContent = curData.length+' rows';
+  document.getElementById('rcard-title').textContent = q.label;
+  if (btn) btn.disabled=false;
+}
+
+function renderTable(data) {
+  const ta = document.getElementById('tarea');
+  if (!data?.length) {
+    ta.innerHTML='<div style="padding:24px;color:#bbb;text-align:center;font-size:12px;">No results.</div>';
+    ta.style.display='block'; return;
+  }
+  const keys = Object.keys(data[0]).filter(k=>!k.startsWith('_'));
+  const isNum = k => typeof data[0][k]==='number';
+  const thead = `<thead><tr>${keys.map(k=>`<th class="${isNum(k)?'r':''}">${k}</th>`).join('')}</tr></thead>`;
+  const tbody = `<tbody>${data.map(row=>`<tr>${keys.map(k=>{
+    const v=row[k]; let c='';
+    if(isNum(k))       c='td-r';
+    if(k==='Ticker')   c='td-hl';
+    if(k==='#')        c='td-dim td-r';
+    if(typeof v==='string'&&v.startsWith('+')) c+=' td-pos';
+    if(typeof v==='string'&&v.startsWith('-')) c+=' td-neg';
+    if(k==='Type') return `<td><span class="cpill cp-${v}">${v}</span></td>`;
+    return `<td class="${c.trim()}">${v??''}</td>`;
+  }).join('')}</tr>`).join('')}</tbody>`;
+  ta.innerHTML=`<table>${thead}${tbody}</table>`;
+  ta.style.display='block';
+}
+
+function switchView(m) {
+  document.getElementById('vbtn-table').classList.toggle('active',m==='table');
+  document.getElementById('vbtn-chart').classList.toggle('active',m==='chart');
+  document.getElementById('tarea').style.display=m==='table'?'block':'none';
+  const ca=document.getElementById('carea');
+  if (m==='chart') {
+    ca.classList.add('on');
+    if (!chartInst&&curQid&&Q[curQid].chart&&curData?.length) Q[curQid].chart(curData);
+  } else {
+    ca.classList.remove('on');
+  }
+}
+
+function toggleSql() {
+  const c=document.getElementById('scode'),b=document.getElementById('stbtn');
+  b.textContent=c.classList.toggle('open')?'hide':'show';
+}
+
+// chart helpers
+const COPTS = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{labels:{color:'#888',font:{size:11}}}},
+  scales:{x:{grid:{color:'#f0f0f0'},ticks:{color:'#888',font:{size:11}}},
+          y:{grid:{color:'#f0f0f0'},ticks:{color:'#888',font:{size:11}}}}
+};
+
+function bar(labels,vals,label,colors,extra=[],horizontal=false) {
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
+  chartInst = new Chart(document.getElementById('ccanvas'), {
+    type:'bar',
+    data:{labels,datasets:[{label,data:vals,
+      backgroundColor:Array.isArray(colors)?colors:vals.map(()=>colors),
+      borderColor:'transparent',borderRadius:2},...extra]},
+    options:{...COPTS,indexAxis:horizontal?'y':'x'}
+  });
+}
+
+function line(labels,datasets,xLabels,colors) {
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
+  chartInst = new Chart(document.getElementById('ccanvas'), {
+    type:'line',
+    data:{labels:xLabels,datasets:datasets.map((d,i)=>({
+      label:labels[i],data:d,borderColor:colors[i],backgroundColor:'transparent',
+      pointBackgroundColor:colors[i],tension:.3,pointRadius:2,spanGaps:true}))},
+    options:{...COPTS,scales:{x:{...COPTS.scales.x,ticks:{...COPTS.scales.x.ticks,maxRotation:30}},y:COPTS.scales.y}}
+  });
+}
+
+async function init() {
+  setMode('stock');
+  try {
+    const j = await (await fetch('api.php?q=sectors')).json();
+    if (j.rows?.length) SECTORS = j.rows.map(r=>r.sector_name);
+  } catch(e) {}
+  setMode(curMode);
+  document.getElementById('init-loader').classList.add('off');
+}
+init();
+</script>
+</body>
+</html>

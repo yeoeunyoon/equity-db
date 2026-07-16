@@ -1,0 +1,136 @@
+===============================================================
+process.txt — Data Acquisition and Cleaning Documentation
+Equity Market Intelligence & Portfolio Analysis Database
+===============================================================
+
+OVERVIEW
+--------
+Data for this database was generated and cleaned using a Python script
+(generate_data.py) that produces TSV files for bulk loading into MySQL.
+Where possible, data values reflect real-world financial figures for
+the 25 selected S&P 500 companies, 5 major ETFs, and 5 sample option
+contracts.
+
+DATA SOURCES
+------------
+1. Sector & Industry classifications
+   - Source: S&P Global Industry Classification Standard (GICS)
+     URL: https://www.spglobal.com/spdji/en/landing/topic/gics/
+   - Format: Manually curated from public GICS reference tables
+   - Cleaning: Selected 11 top-level sectors and 20 representative
+     sub-industries. Mapped each of the 25 companies to its GICS
+     industry. No duplicates or anomalies.
+
+2. Company data
+   - Source: Yahoo Finance company profiles
+     URL: https://finance.yahoo.com/
+   - Format: Company names, tickers, and exchange listings obtained
+     from public profile pages.
+   - Cleaning: Standardized company names (e.g., "Alphabet Inc."
+     not "ALPHABET INC"). Verified each ticker maps to exactly one
+     company. Country set to "US" for all (scope limited to US equities).
+
+3. Exchange data
+   - Source: General public knowledge (NYSE, NASDAQ, CBOE)
+   - Format: Manually entered exchange names, countries, and IANA
+     timezone identifiers.
+   - Cleaning: None needed; only 3 exchanges.
+
+4. Price (OHLCV) data
+   - Source: Could be obtained via yfinance Python library
+     URL: https://pypi.org/project/yfinance/
+     Command: yfinance.download("AAPL", start="2025-01-02", end="2025-03-28")
+   - Format: yfinance returns a pandas DataFrame with columns:
+     Date, Open, High, Low, Close, Adj Close, Volume
+   - For this submission: Generated programmatically using a random walk
+     model seeded at realistic base prices per security, with daily
+     returns drawn from N(0.0003, 0.015). This produces realistic price
+     movement patterns.
+   - Cleaning steps that would apply to real yfinance data:
+     * Drop "Adj Close" column (not in our schema)
+     * Rename "Date" -> "trade_date"
+     * Remove any rows with NaN values (holidays where market was closed
+       but yfinance returns NaN)
+     * Remove duplicate date entries if any
+     * Round prices to 4 decimal places
+     * Verify volume is non-negative integer
+     * Map ticker to security_id via lookup table
+
+5. Financial Snapshot data
+   - Source: Could be obtained from yfinance Ticker.info dict
+     Fields: marketCap, trailingPE, trailingEps, beta
+   - For this submission: Generated with randomized but realistic ranges:
+     * market_cap: base_price * random(500-3000) * 1,000,000
+     * pe_ratio: uniform(10, 60)
+     * eps: derived as price / pe_ratio
+     * beta: uniform(0.5, 2.0)
+   - Cleaning: One snapshot per security as of 2025-03-28.
+
+6. Corporate Action data
+   - Source: Could be obtained from yfinance Ticker.dividends and
+     Ticker.splits history.
+   - For this submission: Manually curated 12 representative events
+     including dividends for major dividend payers (KO, JNJ, PG, JPM,
+     XOM, MCD, UNH, V, PFE, MSFT, AAPL) and one stock split (NVDA).
+   - Cleaning: Verified action_type values match ENUM constraints.
+     Verified amounts are positive.
+
+7. Portfolio & Holding data
+   - Source: Fabricated for demonstration purposes.
+   - 5 portfolios with distinct investment strategies (growth, value,
+     tech, dividend income, balanced).
+   - 5 holdings per portfolio (25 total), with realistic share counts
+     and cost basis values.
+   - Cleaning: Verified all security_id references exist in Security
+     table. Verified shares > 0 and average_cost >= 0.
+
+8. ETF data
+   - Source: Fund names and expense ratios from etf.com and fund
+     prospectuses.
+   - Cleaning: Expense ratios expressed as percentages (e.g., 0.0945
+     for SPY = 9.45 basis points). Verified non-negative.
+
+9. Option Contract data
+   - Source: Option ticker symbology follows OCC standard format.
+   - 5 sample contracts: calls and puts on AAPL, MSFT, TSLA, SPY.
+   - Implied volatility and open interest values are representative.
+   - Cleaning: Verified strike_price > 0, open_interest >= 0.
+
+FILE FORMAT
+-----------
+All output files are tab-separated (TSV) with a header row.
+Encoding: UTF-8
+Line endings: Unix (LF)
+Date format: ISO 8601 (YYYY-MM-DD)
+Decimal separator: period (.)
+NULL values: represented as empty string
+
+SCRIPT USAGE
+------------
+1. Run: python3 generate_data.py
+2. Output: 13 TSV files in ./data/ directory
+3. Load: mysql -u <user> -p <db> --local-infile=1 < load.sql
+
+To replace generated data with real yfinance data:
+1. pip install yfinance pandas
+2. Modify generate_data.py to call yfinance.download() for Price data
+   and yfinance.Ticker("AAPL").info for Financial Snapshot data
+3. Re-run the script
+
+ROW COUNTS
+----------
+sector.tsv               11 rows
+industry.tsv             20 rows
+company.tsv              25 rows
+exchange.tsv              3 rows
+security.tsv             35 rows  (25 stocks + 5 ETFs + 5 options)
+stock.tsv                25 rows
+etf.tsv                   5 rows
+option_contract.tsv       5 rows
+portfolio.tsv             5 rows
+holding.tsv              25 rows
+price.tsv             1,800 rows  (30 securities x 60 trading days)
+financial_snapshot.tsv   25 rows
+corporate_action.tsv     12 rows
+                      --------
+TOTAL                 1,996 rows

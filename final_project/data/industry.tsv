@@ -1,0 +1,21 @@
+industry_id	industry_name	sector_id
+1	Software - Infrastructure	1
+2	Semiconductors	1
+3	Consumer Electronics	1
+4	Software - Application	1
+5	Drug Manufacturers	2
+6	Biotechnology	2
+7	Banks - Diversified	3
+8	Financial Data & Exchanges	3
+9	Internet Retail	4
+10	Auto Manufacturers	4
+11	Oil & Gas Integrated	5
+12	Oil & Gas E&P	5
+13	Aerospace & Defense	6
+14	Internet Content & Info	7
+15	Household & Personal Products	8
+16	Beverages - Non-Alcoholic	8
+17	Utilities - Regulated Electric	9
+18	REIT - Diversified	10
+19	Specialty Chemicals	11
+20	Restaurants	4
