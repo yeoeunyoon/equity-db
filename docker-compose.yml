@@ -1,0 +1,39 @@
+services:
+  db:
+    image: mysql:8.0
+    command: --local-infile=1
+    environment:
+      MYSQL_DATABASE: equity_db
+      MYSQL_USER: equity
+      MYSQL_PASSWORD: equity
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - ./setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+      - ./docker/load.docker.sql:/docker-entrypoint-initdb.d/02-load.sql:ro
+      # secure_file_priv is /var/lib/mysql-files, so the TSVs must live under it
+      # for the server-side LOAD DATA INFILE in load.docker.sql to work.
+      - ./data:/var/lib/mysql-files/data:ro
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: ./docker
+    environment:
+      DB_HOST: db
+      DB_NAME: equity_db
+      DB_USER: equity
+      DB_PASS: equity
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
