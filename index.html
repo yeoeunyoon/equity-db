@@ -137,7 +137,7 @@ tbody tr:hover td { background: #fafafa; }
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">📈 Market Explorer</div>
+  <div class="brand">Market Explorer</div>
   <div class="brand-sub">Equity analytics — pick a view, set parameters, choose an analysis</div>
 </header>
 <div class="shell">
@@ -146,17 +146,14 @@ tbody tr:hover td { background: #fafafa; }
       <div class="section-label">Step 1 · Choose a view</div>
       <div class="mode-tabs">
         <button class="mode-tab active" onclick="setMode('stock')" id="tab-stock">
-          <span class="mode-ic">📊</span>
           <span class="mode-name">Single Stock</span>
           <span class="mode-desc">Analyze one company over time</span>
         </button>
         <button class="mode-tab" onclick="setMode('sector')" id="tab-sector">
-          <span class="mode-ic">🏛️</span>
           <span class="mode-name">Sector &amp; Market</span>
           <span class="mode-desc">Compare across the whole market</span>
         </button>
         <button class="mode-tab" onclick="setMode('portfolio')" id="tab-portfolio">
-          <span class="mode-ic">💼</span>
           <span class="mode-name">Portfolio</span>
           <span class="mode-desc">Value &amp; track a set of holdings</span>
         </button>
@@ -167,7 +164,6 @@ tbody tr:hover td { background: #fafafa; }
   <main class="main">
     <div class="empty" id="empty">
       <div class="empty-card">
-        <div class="empty-icon">👋</div>
         <div class="empty-title">Welcome to Market Explorer</div>
         <div class="empty-lead">Explore live equity-market data — prices, volatility, valuations, dividends and more — without writing any SQL.</div>
         <div class="empty-steps">
@@ -806,7 +802,7 @@ function portfolioCtrl() {
           <button class="rpill" onclick="setRange('5y',this)">5Y</button>
         </div></div>
     </div>
-    <button class="run-btn" onclick="runPortfolio()">View portfolio ▸</button>`;
+    <button class="run-btn" onclick="runPortfolio()">View portfolio</button>`;
 }
 
 async function loadPortfolios() {
@@ -817,7 +813,7 @@ async function loadPortfolios() {
     .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} (${p.holdings})</option>`).join('');
   const samples = pfList.filter(p=>+p.is_sample)
     .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} — sample (${p.holdings})</option>`).join('');
-  sel.innerHTML = `<option value="custom">⭐ My Portfolio (editor)</option>`
+  sel.innerHTML = `<option value="custom">My Portfolio (editor)</option>`
     + (mine ? `<optgroup label="Saved to my account">${mine}</optgroup>` : '')
     + `<optgroup label="Sample portfolios">${samples}</optgroup>`;
   let savedSel = null; try { savedSel = localStorage.getItem('me_pf_sel'); } catch(e) {}
@@ -846,7 +842,7 @@ function renderPfEditor() {
         <div class="section-label">Your holdings${editing?` · editing “${editing}”`:''}</div>
         <div id="pf-rows"></div>
         <button class="pf-add" onclick="pfAddRow()">+ Add holding</button>
-        <button class="pf-save" onclick="pfSaveServer()">💾 ${pfSavedPid?'Update saved portfolio':'Save to my portfolios'}</button>
+        <button class="pf-save" onclick="pfSaveServer()">${pfSavedPid?'Update saved portfolio':'Save to my portfolios'}</button>
         <div class="pf-note">The editor is kept in this browser. Saving stores it on the server under your sync key <code>${pfOwner}</code>. <a href="#" onclick="pfChangeKey();return false;">Change key</a> to load these on another device.</div>
       </div>`;
     drawPfRows();
@@ -858,8 +854,8 @@ function renderPfEditor() {
       <div>
         <div class="section-label">Saved portfolio</div>
         <div style="display:flex;gap:6px;">
-          <button class="pf-add" style="flex:1;margin-top:0;" onclick="pfEditServer(${p.portfolio_id})">✎ Edit</button>
-          <button class="pf-add" style="flex:1;margin-top:0;border-color:#fca5a5;color:#b91c1c;" onclick="pfDeleteServer(${p.portfolio_id})">🗑 Delete</button>
+          <button class="pf-add" style="flex:1;margin-top:0;" onclick="pfEditServer(${p.portfolio_id})">Edit</button>
+          <button class="pf-add" style="flex:1;margin-top:0;border-color:#fca5a5;color:#b91c1c;" onclick="pfDeleteServer(${p.portfolio_id})">Delete</button>
         </div>
       </div>`;
   } else {
