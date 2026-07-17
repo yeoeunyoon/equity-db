@@ -276,34 +276,6 @@ Open <http://localhost:8080/index.html>. To tear everything down, run
 
 ---
 
-## Roadmap
-
-- [ ] Materialized/rollup tables for latest-snapshot lookups (replace repeated
-      `MAX(snapshot_date)` correlated subqueries)
-- [ ] Add covering indexes on `Price(security_id, trade_date)` and
-      `Financial_Snapshot(security_id, snapshot_date)` for large-history performance
-- [ ] Incremental daily ingestion (append new prices instead of full regeneration)
-- [ ] Expand the universe beyond 25 tickers / 5 ETFs and lengthen price history
-- [ ] Portfolio-level analytics endpoints (weighted returns, exposure, P&L on `Holding`)
-- [ ] Automated tests for the API layer and a CI workflow
-- [ ] Configurable benchmark (currently hard-coded to `SPY`)
-
----
-
-## Team & contributions
-
-This was a two-person project.
-
-| Contributor | Focus areas |
-|-------------|-------------|
-| _<Name 1>_ | _<e.g., schema design & normalization, `setup.sql`, `generate_data.py`>_ |
-| _<Name 2>_ | _<e.g., analytics queries, `api.php`, front-end explorer>_ |
-
-_Replace the placeholders above with each teammate's name and the parts of the system
-they owned._
-
----
-
 ## License
 
 Released under the [MIT License](LICENSE).
