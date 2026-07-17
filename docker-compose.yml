@@ -35,5 +35,28 @@ services:
       db:
         condition: service_healthy
 
+  # Regenerates data/*.tsv from the live S&P 500 + Yahoo Finance and reloads
+  # MySQL: once on boot, then daily at REFRESH_AT (UTC). Writes into the shared
+  # ./data (mounted read-only into db as /var/lib/mysql-files/data), then runs
+  # docker/reload.sql as root via server-side LOAD DATA INFILE.
+  refresh:
+    build:
+      context: .
+      dockerfile: docker/refresh/Dockerfile
+    environment:
+      DB_HOST: db
+      DB_NAME: equity_db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      REFRESH_AT: ${REFRESH_AT:-00:30}
+      BOOT_MODE: ${BOOT_MODE:-daily}
+      PRICE_START: ${PRICE_START:-}
+      PRICE_END: ${PRICE_END:-}
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   db_data:
