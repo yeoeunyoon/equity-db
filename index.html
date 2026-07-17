@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Market Explorer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -94,13 +98,46 @@ tbody tr:hover td { background: #fafafa; }
 .chart-wrap { padding: 16px; display: none; }
 .chart-wrap.on { display: block; }
 .chart-canvas { position: relative; height: 280px; }
+/* portfolio dashboard */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
+.kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.kpi-val { font-size: 22px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi-sub { font-size: 12px; margin-top: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kpi .pos { color: #059669; } .kpi .neg { color: #dc2626; }
+.pf-card { border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
+.pf-card-h { font-size: 12px; font-weight: 600; color: #555; padding: 9px 14px; background: #fafafa; border-bottom: 1px solid #eee; }
+.alloc-row { display: grid; grid-template-columns: 150px 1fr 54px; align-items: center; gap: 10px; padding: 6px 14px; font-size: 12px; }
+.alloc-bar { height: 8px; border-radius: 4px; background: #eef0f2; overflow: hidden; }
+.alloc-fill { height: 100%; background: #2563eb; border-radius: 4px; }
+.alloc-w { text-align: right; font-variant-numeric: tabular-nums; color: #555; }
+.pf-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 56px 30px; gap: 5px; margin-bottom: 5px; align-items: center; }
+.pf-row input { padding: 6px 7px; font-size: 12px; width: 100%; min-width: 0; }
+.pf-row input[type=number] { -moz-appearance: textfield; }
+.pf-row input[type=number]::-webkit-inner-spin-button, .pf-row input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.pf-row .pf-t { text-transform: uppercase; }
+.pf-del { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 30px; padding: 0; border: 1px solid var(--line); background: #fff; border-radius: 6px; color: #b91c1c; cursor: pointer; font-size: 16px; line-height: 1; }
+.pf-del:hover { border-color: #fca5a5; background: #fef2f2; }
+.pf-add { margin-top: 4px; font-size: 12px; color: #2563eb; background: none; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 6px 10px; cursor: pointer; width: 100%; }
+.pf-add:hover { border-color: #2563eb; }
+.pf-save { width: 100%; padding: 9px; margin-top: 8px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pf-save:hover { background: #047857; }
+.pf-note { font-size: 11px; color: var(--faint); margin-top: 6px; line-height: 1.4; }
+.pf-note code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: #334155; }
+.pf-note a { color: #2563eb; text-decoration: none; }
+.pf-note a:hover { text-decoration: underline; }
+.ac-pop { position: absolute; z-index: 10000; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); max-height: 260px; overflow-y: auto; display: none; }
+.ac-item { padding: 7px 11px; font-size: 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+.ac-item b { font-weight: 600; color: var(--ink); }
+.ac-item span { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.ac-item:hover, .ac-item.on { background: #f1f5f9; }
 .init-loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(255,255,255,.95); color: #888; font-size: 13px; z-index: 9999; }
 .init-loader.off { display: none; }
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">📈 Market Explorer</div>
+  <div class="brand">Market Explorer</div>
   <div class="brand-sub">Equity analytics — pick a view, set parameters, choose an analysis</div>
 </header>
 <div class="shell">
@@ -109,14 +146,16 @@ tbody tr:hover td { background: #fafafa; }
       <div class="section-label">Step 1 · Choose a view</div>
       <div class="mode-tabs">
         <button class="mode-tab active" onclick="setMode('stock')" id="tab-stock">
-          <span class="mode-ic">📊</span>
           <span class="mode-name">Single Stock</span>
           <span class="mode-desc">Analyze one company over time</span>
         </button>
         <button class="mode-tab" onclick="setMode('sector')" id="tab-sector">
-          <span class="mode-ic">🏛️</span>
           <span class="mode-name">Sector &amp; Market</span>
           <span class="mode-desc">Compare across the whole market</span>
+        </button>
+        <button class="mode-tab" onclick="setMode('portfolio')" id="tab-portfolio">
+          <span class="mode-name">Portfolio</span>
+          <span class="mode-desc">Value &amp; track a set of holdings</span>
         </button>
       </div>
     </div>
@@ -125,7 +164,6 @@ tbody tr:hover td { background: #fafafa; }
   <main class="main">
     <div class="empty" id="empty">
       <div class="empty-card">
-        <div class="empty-icon">👋</div>
         <div class="empty-title">Welcome to Market Explorer</div>
         <div class="empty-lead">Explore live equity-market data — prices, volatility, valuations, dividends and more — without writing any SQL.</div>
         <div class="empty-steps">
@@ -142,6 +180,15 @@ tbody tr:hover td { background: #fafafa; }
 
 <script>
 let curMode='stock', curQid=null, curData=null, chartInst=null, curRange='1y', shown=false;
+// Portfolio-view state. pfSel is a portfolio_id, or 'custom' for the build-your-own
+// portfolio (persisted in the browser only).
+let pfSel=null, pfList=[], pfCustom=[], pfSavedPid=null, pfOwner='';
+try { pfCustom = JSON.parse(localStorage.getItem('me_pf_custom')||'[]') || []; } catch(e) { pfCustom=[]; }
+try { pfOwner = localStorage.getItem('me_owner') || ''; } catch(e) {}
+if (!pfOwner) {   // a per-browser sync key; user can copy it to another device
+  pfOwner = 'u:' + ((self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'').slice(0,12) : Math.random().toString(36).slice(2,14));
+  try { localStorage.setItem('me_owner', pfOwner); } catch(e) {}
+}
 let SECTORS = ['Technology','Healthcare','Financial Services','Consumer Discretionary',
                'Energy','Industrials','Communication Services','Consumer Staples',
                'Utilities','Real Estate','Materials'];
@@ -157,7 +204,7 @@ const DESC = {
   s3:'Implied volatility of calls vs puts by expiry',
   s4:'Dividends & splits with price 7 days before/after',
   s5:'Total return compared with the S&P 500',
-  s6:'P/E, EPS, beta and market-cap history',
+  s6:'Latest P/E, EPS, beta and market cap',
   r1:'Average return of each sector vs the S&P 500',
   r2:'Valuation (P/E) across industries in the sector',
   r3:'Companies with the longest EPS-growth streaks',
@@ -189,6 +236,18 @@ async function api(q, extra={}) {
   const j = await res.json();
   if (j.error) throw new Error(j.error);
   return j.rows||[];
+}
+
+// POST helper for write endpoints (portfolio save/delete).
+async function apiPost(q, params) {
+  const res = await fetch('api.php?q='+encodeURIComponent(q), {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams(params)
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error);
+  return j;
 }
 
 function hl(s) {
@@ -324,8 +383,8 @@ WHERE sec.ticker = :ticker;`,
       d.map(r=>(r._v??0)>=0?'rgba(5,150,105,.6)':'rgba(220,38,38,.5)'))
   },
 
-  s6: { mode:'stock', label:'Financial snapshot trend', hasChart:true,
-    sql:`-- Q06: P/E, EPS, beta, market cap over time for a given stock
+  s6: { mode:'stock', label:'Fundamentals snapshot', hasChart:false,
+    sql:`-- Q06: latest P/E, EPS, beta and market cap for a given stock
 SELECT fs.snapshot_date, fs.pe_ratio, fs.eps, fs.beta,
   ROUND(fs.market_cap/1e9,2) AS market_cap_b
 FROM Financial_Snapshot fs JOIN Security s ON fs.security_id = s.security_id
@@ -337,11 +396,7 @@ WHERE s.ticker = :ticker ORDER BY fs.snapshot_date;`,
         'EPS':r.eps!=null?'$'+fmt(+r.eps):'-',
         'Beta':r.beta!=null?fmt(+r.beta,3):'-',
         'Mkt Cap ($B)':r.market_cap_b!=null?fmt(+r.market_cap_b):'-'}));
-    },
-    chart: d => line(['P/E','Beta'],
-      [d.map(r=>r['P/E']==='-'?null:+r['P/E'].replace(/,/g,'')),
-       d.map(r=>r.Beta==='-'?null:+r.Beta.replace(/,/g,''))],
-      d.map(r=>r['Snapshot Date']),['#2563eb','#d97706'])
+    }
   },
 
   r1: { mode:'sector', label:'Sector returns vs SPY', hasChart:true,
@@ -532,10 +587,8 @@ function stockCtrl() {
     <div>
       <div class="section-label">Step 2 · Set parameters</div>
       <div class="ctrl-group"><div class="ctrl-label">Ticker</div>
-        <input type="text" id="ctrl-ticker" list="ticker-list" autocomplete="off"
-               placeholder="Type or pick, e.g. AAPL" value="AAPL"
-               onchange="reRun()" onkeydown="if(event.key==='Enter'){event.preventDefault();reRun();}">
-        <datalist id="ticker-list">${TICKERS.map(t=>`<option value="${t}"></option>`).join('')}</datalist>
+        <input type="text" id="ctrl-ticker" class="ac-input" autocomplete="off"
+               placeholder="Search ticker or company…" value="AAPL" onchange="reRun()">
       </div>
       <div class="ctrl-group" style="margin-top:12px;"><div class="ctrl-label">Date range</div>
         <div class="range-pills">
@@ -550,8 +603,7 @@ function stockCtrl() {
     <div>
       <div class="section-label">Step 3 · Pick an analysis</div>
       <div class="query-list" id="qlist"></div>
-    </div>
-    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
+    </div>`;
 }
 function sectorCtrl() {
   return `
@@ -576,12 +628,13 @@ function sectorCtrl() {
     <div>
       <div class="section-label">Step 3 · Pick an analysis</div>
       <div class="query-list" id="qlist"></div>
-    </div>
-    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
+    </div>`;
 }
+// Retired on the current dataset: s3 (only stale/expired option contracts) and
+// r3 (needs ≥5 quarterly snapshots; the DB has one snapshot per stock).
 const MODES = {
-  stock:  {keys:['s1','s2','s3','s4','s5','s6'],           ctrl:stockCtrl},
-  sector: {keys:['r1','r2','r3','r4','r5','r6','r7','r8','r9'], ctrl:sectorCtrl}
+  stock:  {keys:['s1','s2','s4','s5','s6'],               ctrl:stockCtrl},
+  sector: {keys:['r1','r2','r4','r5','r6','r7','r8','r9'], ctrl:sectorCtrl}
 };
 
 function setMode(m) {
@@ -589,6 +642,16 @@ function setMode(m) {
   if (chartInst) { chartInst.destroy(); chartInst=null; }
   document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+m).classList.add('active');
+
+  if (m==='portfolio') {
+    document.getElementById('ctrl-area').innerHTML = portfolioCtrl();
+    renderPfEditor();
+    document.getElementById('result-root').style.display='none';
+    document.getElementById('empty').style.display='flex';
+    loadPortfolios();   // populates the picker, then shows the first portfolio
+    return;
+  }
+
   document.getElementById('ctrl-area').innerHTML = MODES[m].ctrl();
   const keys = MODES[m].keys;
   document.getElementById('qlist').innerHTML = keys.map(k=>
@@ -617,10 +680,12 @@ function setRange(r,btn) {
   reRun();
 }
 
-// Re-run the current analysis after a parameter change, but only once results
-// are already on screen (so changing inputs on the welcome screen does nothing).
+// Re-run the current view after a parameter change, but only once results are
+// already on screen (so changing inputs on the welcome screen does nothing).
 function reRun() {
-  if (shown && curQid) runQuery();
+  if (!shown) return;
+  if (curMode==='portfolio') runPortfolio();
+  else if (curQid) runQuery();
 }
 
 async function runQuery() {
@@ -677,7 +742,9 @@ async function runQuery() {
 function renderTable(data) {
   const ta = document.getElementById('tarea');
   if (!data?.length) {
-    ta.innerHTML='<div style="padding:24px;color:#bbb;text-align:center;font-size:12px;">No results.</div>';
+    ta.innerHTML='<div style="padding:32px 24px;color:#999;text-align:center;font-size:13px;">'
+      +'No rows for this analysis on the current data.'
+      +'<br><span style="font-size:12px;color:#bbb;">Try a different ticker, sector, or date range.</span></div>';
     ta.style.display='block'; return;
   }
   const keys = Object.keys(data[0]).filter(k=>!k.startsWith('_'));
@@ -715,6 +782,377 @@ function toggleSql() {
   b.textContent=c.classList.toggle('open')?'hide':'show';
 }
 
+// ── Portfolio view ─────────────────────────────────────────────────────────────
+function portfolioCtrl() {
+  return `
+    <div>
+      <div class="section-label">Step 2 · Choose a portfolio</div>
+      <div class="ctrl-group"><div class="ctrl-label">Portfolio</div>
+        <select id="ctrl-pf" onchange="onPfSelect()"><option value="">Loading…</option></select></div>
+      <div class="pf-note">Presets are fabricated sample portfolios. “My Portfolio” is yours — it stays saved in this browser.</div>
+    </div>
+    <div id="pf-editor-wrap"></div>
+    <div>
+      <div class="section-label">Step 3 · Performance window</div>
+      <div class="ctrl-group"><div class="ctrl-label">Date range</div>
+        <div class="range-pills">
+          <button class="rpill" onclick="setRange('6m',this)">6M</button>
+          <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
+          <button class="rpill" onclick="setRange('3y',this)">3Y</button>
+          <button class="rpill" onclick="setRange('5y',this)">5Y</button>
+        </div></div>
+    </div>
+    <button class="run-btn" onclick="runPortfolio()">View portfolio</button>`;
+}
+
+async function loadPortfolios() {
+  const sel = document.getElementById('ctrl-pf');
+  try { pfList = await api('portfolios', {owner:pfOwner}); } catch(e) { pfList = []; }
+  if (!sel) return;
+  const mine = pfList.filter(p=>!(+p.is_sample))
+    .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} (${p.holdings})</option>`).join('');
+  const samples = pfList.filter(p=>+p.is_sample)
+    .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} — sample (${p.holdings})</option>`).join('');
+  sel.innerHTML = `<option value="custom">My Portfolio (editor)</option>`
+    + (mine ? `<optgroup label="Saved to my account">${mine}</optgroup>` : '')
+    + `<optgroup label="Sample portfolios">${samples}</optgroup>`;
+  let savedSel = null; try { savedSel = localStorage.getItem('me_pf_sel'); } catch(e) {}
+  const valid = savedSel && (savedSel==='custom' || pfList.some(p=>String(p.portfolio_id)===savedSel));
+  pfSel = valid ? savedSel : 'custom';
+  sel.value = pfSel;
+  renderPfEditor();
+  runPortfolio();
+}
+
+function onPfSelect() {
+  pfSel = document.getElementById('ctrl-pf').value;
+  if (pfSel === 'custom') pfSavedPid = null;   // manually opening the editor = a fresh save context
+  try { localStorage.setItem('me_pf_sel', pfSel); } catch(e) {}
+  renderPfEditor();
+  runPortfolio();
+}
+
+function renderPfEditor() {
+  const w = document.getElementById('pf-editor-wrap');
+  if (!w) return;
+  if (pfSel === 'custom') {
+    const editing = pfSavedPid ? (pfList.find(p=>String(p.portfolio_id)===String(pfSavedPid))||{}).portfolio_name : '';
+    w.innerHTML = `
+      <div>
+        <div class="section-label">Your holdings${editing?` · editing “${editing}”`:''}</div>
+        <div id="pf-rows"></div>
+        <button class="pf-add" onclick="pfAddRow()">+ Add holding</button>
+        <button class="pf-save" onclick="pfSaveServer()">${pfSavedPid?'Update saved portfolio':'Save to my portfolios'}</button>
+        <div class="pf-note">The editor is kept in this browser. Saving stores it on the server under your sync key <code>${pfOwner}</code>. <a href="#" onclick="pfChangeKey();return false;">Change key</a> to load these on another device.</div>
+      </div>`;
+    drawPfRows();
+    return;
+  }
+  const p = pfList.find(x=>String(x.portfolio_id)===String(pfSel));
+  if (p && !(+p.is_sample)) {   // one of my saved portfolios → offer edit / delete
+    w.innerHTML = `
+      <div>
+        <div class="section-label">Saved portfolio</div>
+        <div style="display:flex;gap:6px;">
+          <button class="pf-add" style="flex:1;margin-top:0;" onclick="pfEditServer(${p.portfolio_id})">Edit</button>
+          <button class="pf-add" style="flex:1;margin-top:0;border-color:#fca5a5;color:#b91c1c;" onclick="pfDeleteServer(${p.portfolio_id})">Delete</button>
+        </div>
+      </div>`;
+  } else {
+    w.innerHTML = '';   // a sample portfolio: read-only
+  }
+}
+
+async function pfSaveServer() {
+  const spec = pfCustom.filter(h=>h.ticker && +h.shares>0)
+    .map(h=>`${h.ticker.toUpperCase()}:${+h.shares}:${+h.cost||0}`).join(',');
+  if (!spec) { alert('Add at least one holding (ticker + shares) before saving.'); return; }
+  const cur = pfSavedPid ? (pfList.find(p=>String(p.portfolio_id)===String(pfSavedPid))||{}).portfolio_name : '';
+  const name = prompt('Name this portfolio:', cur || 'My Portfolio');
+  if (name === null) return;
+  try {
+    const r = await apiPost('pf_save', {owner:pfOwner, name, holdings:spec, pid:pfSavedPid||0});
+    pfSavedPid = null;
+    await loadPortfolios();
+    pfSel = String(r.pid);
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = pfSel;
+    try { localStorage.setItem('me_pf_sel', pfSel); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not save: '+e.message); }
+}
+
+async function pfEditServer(pid) {
+  try {
+    const rows = await api('pf_holdings', {pid});
+    pfCustom = rows.map(h=>({ticker:h.ticker, shares:+h.shares, cost:+h.avg_cost}));
+    savePfCustom();
+    pfSavedPid = pid;
+    pfSel = 'custom';
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = 'custom';
+    try { localStorage.setItem('me_pf_sel', 'custom'); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not load portfolio: '+e.message); }
+}
+
+async function pfDeleteServer(pid) {
+  if (!confirm('Delete this saved portfolio? This cannot be undone.')) return;
+  try {
+    await apiPost('pf_delete', {owner:pfOwner, pid});
+    if (String(pfSavedPid)===String(pid)) pfSavedPid = null;
+    await loadPortfolios();
+    pfSel = 'custom';
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = 'custom';
+    try { localStorage.setItem('me_pf_sel', 'custom'); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not delete: '+e.message); }
+}
+
+function pfChangeKey() {
+  const v = prompt('Enter your sync key to load its portfolios on this device.\nAnyone with this key can see these portfolios, so keep it private.', pfOwner);
+  if (v === null) return;
+  let k = v.trim();
+  if (!k) return;
+  if (!k.startsWith('u:')) k = 'u:' + k.replace(/[^A-Za-z0-9_-]/g,'');
+  pfOwner = k;
+  try { localStorage.setItem('me_owner', pfOwner); } catch(e) {}
+  pfSavedPid = null;
+  loadPortfolios();
+}
+
+function drawPfRows() {
+  const c = document.getElementById('pf-rows');
+  if (!c) return;
+  c.innerHTML = pfCustom.map((h,i)=>`
+    <div class="pf-row">
+      <input class="pf-t ac-input" autocomplete="off" value="${h.ticker||''}" placeholder="Ticker / name" onchange="pfEdit(${i},'ticker',this.value)">
+      <input class="pf-n" type="number" min="0" step="any" value="${h.shares}" placeholder="shares" onchange="pfEdit(${i},'shares',this.value)">
+      <input class="pf-n" type="number" min="0" step="any" value="${h.cost}" placeholder="avg $" onchange="pfEdit(${i},'cost',this.value)">
+      <button class="pf-del" type="button" onclick="pfDelRow(${i})" title="Remove holding">×</button>
+    </div>`).join('') ||
+    `<div class="pf-note">No holdings yet — click “Add holding” below.</div>`;
+}
+
+function pfEdit(i, field, val) {
+  if (!pfCustom[i]) return;
+  pfCustom[i][field] = field==='ticker' ? val.toUpperCase().trim() : (parseFloat(val)||0);
+  savePfCustom();
+  reRun();   // reflect the change in the dashboard right away
+}
+function pfAddRow() { pfCustom.push({ticker:'',shares:0,cost:0}); savePfCustom(); drawPfRows(); }
+function pfDelRow(i) { pfCustom.splice(i,1); savePfCustom(); drawPfRows(); reRun(); }
+function savePfCustom() { try { localStorage.setItem('me_pf_custom', JSON.stringify(pfCustom)); } catch(e){} }
+
+const pfEmpty = msg => `<div style="padding:48px 24px;text-align:center;color:#999;font-size:13px;">${msg}</div>`;
+
+async function runPortfolio() {
+  shown = true;
+  document.getElementById('empty').style.display = 'none';
+  const root = document.getElementById('result-root');
+  root.style.display = 'flex';
+  root.innerHTML = `<div class="loading on" style="min-height:40vh;"><div class="spinner"></div>Building portfolio…</div>`;
+  const btn = document.querySelector('.run-btn');
+  if (btn) btn.disabled = true;
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
+
+  let params;
+  if (pfSel === 'custom') {
+    const spec = pfCustom.filter(h=>h.ticker && +h.shares>0)
+      .map(h=>`${h.ticker.toUpperCase()}:${+h.shares}:${+h.cost||0}`).join(',');
+    if (!spec) { root.innerHTML = pfEmpty('Add at least one holding (ticker + shares) to see your portfolio.'); if(btn)btn.disabled=false; return; }
+    params = {holdings:spec};
+  } else {
+    params = {pid:pfSel};
+  }
+
+  let holdings, series, spy=[];
+  try {
+    [holdings, series] = await Promise.all([ api('pf_holdings', params), api('pf_series', params) ]);
+    try { spy = await api('s1', {ticker:'SPY'}); } catch(e) {}
+  } catch(e) {
+    root.innerHTML = pfEmpty('Error: '+e.message);
+    if (btn) btn.disabled=false;
+    return;
+  }
+  renderPortfolio(holdings, series, spy);
+  if (btn) btn.disabled=false;
+}
+
+function renderPortfolio(holdings, series, spy) {
+  const root = document.getElementById('result-root');
+  if (!holdings || !holdings.length) { root.innerHTML = pfEmpty('No holdings to show.'); return; }
+
+  let mv=0, cost=0, div=0, priced=0;
+  holdings.forEach(h=>{ cost += +h.cost_basis||0; div += +h.div_income_12mo||0;
+    if (h.market_value!=null) { mv += +h.market_value; priced++; } });
+  const pl = mv-cost, plpct = cost>0 ? pl/cost*100 : null, yld = mv>0 ? div/mv*100 : null;
+  const cP = v => v>=0 ? 'pos' : 'neg';
+  const money = v => (v<0?'-':'')+'$'+fmtI(Math.abs(v));
+
+  const kpi = `
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-label">Market Value</div>
+        <div class="kpi-val">$${fmtI(mv)}</div><div class="kpi-sub">cost $${fmtI(cost)}</div></div>
+      <div class="kpi"><div class="kpi-label">Unrealized P&amp;L</div>
+        <div class="kpi-val ${cP(pl)}">${pl>=0?'+':''}${money(pl)}</div>
+        <div class="kpi-sub ${cP(pl)}">${plpct==null?'':sgn(plpct)+'%'}</div></div>
+      <div class="kpi"><div class="kpi-label">Dividends (12mo)</div>
+        <div class="kpi-val">$${fmtI(div)}</div><div class="kpi-sub">${yld==null?'':fmt(yld)+'% yield'}</div></div>
+      <div class="kpi"><div class="kpi-label">Holdings</div>
+        <div class="kpi-val">${holdings.length}</div><div class="kpi-sub">${priced} priced</div></div>
+    </div>`;
+
+  const chartCard = `
+    <div class="pf-card">
+      <div class="pf-card-h">Performance vs S&amp;P 500 — growth of $100</div>
+      <div class="chart-wrap on"><canvas id="ccanvas" class="chart-canvas"></canvas></div>
+    </div>`;
+
+  const trow = h => {
+    const w = (mv>0 && h.market_value!=null) ? (+h.market_value/mv*100) : null;
+    const plc = h.unrealized_pl!=null ? (h.unrealized_pl>=0?'td-pos':'td-neg') : '';
+    const sh = +h.shares;
+    return `<tr>
+      <td class="td-hl">${h.ticker}</td>
+      <td>${h.company_name||'<span style="color:#bbb">—</span>'}</td>
+      <td>${h.sector_name||''}</td>
+      <td class="td-r">${fmt(sh, sh%1?4:0)}</td>
+      <td class="td-r">$${fmt(h.avg_cost)}</td>
+      <td class="td-r">${h.latest_close!=null?'$'+fmt(h.latest_close):'—'}</td>
+      <td class="td-r">${h.market_value!=null?'$'+fmtI(h.market_value):'—'}</td>
+      <td class="td-r ${plc}">${h.unrealized_pl!=null?(h.unrealized_pl>=0?'+':'')+money(h.unrealized_pl):'—'}</td>
+      <td class="td-r ${plc}">${h.unrealized_pl_pct!=null?sgn(h.unrealized_pl_pct)+'%':'—'}</td>
+      <td class="td-r">${w!=null?fmt(w,1)+'%':'—'}</td>
+    </tr>`;
+  };
+  const table = `
+    <div class="pf-card">
+      <div class="pf-card-h">Holdings</div>
+      <div class="tscroll"><table>
+        <thead><tr>
+          <th>Ticker</th><th>Name</th><th>Sector</th>
+          <th class="r">Shares</th><th class="r">Avg Cost</th><th class="r">Price</th>
+          <th class="r">Mkt Value</th><th class="r">P&amp;L $</th><th class="r">P&amp;L %</th><th class="r">Weight</th>
+        </tr></thead>
+        <tbody>${holdings.map(trow).join('')}</tbody>
+      </table></div>
+    </div>`;
+
+  const bySec = {};
+  holdings.forEach(h=>{ if (h.market_value!=null) { const s=h.sector_name||'Other'; bySec[s]=(bySec[s]||0)+ +h.market_value; } });
+  const alloc = Object.entries(bySec).sort((a,b)=>b[1]-a[1]);
+  const allocHtml = alloc.length ? `
+    <div class="pf-card">
+      <div class="pf-card-h">Allocation by sector</div>
+      <div style="padding:8px 0;">
+        ${alloc.map(([s,v])=>{ const w=mv>0?v/mv*100:0; return `
+          <div class="alloc-row">
+            <div>${s}</div>
+            <div class="alloc-bar"><div class="alloc-fill" style="width:${w.toFixed(1)}%;"></div></div>
+            <div class="alloc-w">${fmt(w,1)}%</div>
+          </div>`; }).join('')}
+      </div>
+    </div>` : '';
+
+  root.innerHTML = kpi + chartCard + table + allocHtml;
+  drawPfPerf(series, spy);
+}
+
+function drawPfPerf(series, spy) {
+  if (!series || series.length<2) return;
+  const dates = series.map(r=>r.trade_date);
+  const base = +series[0].port_value || 1;
+  const port = series.map(r=> +r.port_value/base*100);
+  let spyN = null;
+  if (spy && spy.length) {
+    const sm = {}; spy.forEach(r=>{ sm[r.trade_date]=+r.close; });
+    let sbase=null;
+    spyN = dates.map(d=>{ const v=sm[d]; if(v==null) return null; if(sbase==null) sbase=v; return v/sbase*100; });
+  }
+  const datasets = spyN ? [port, spyN] : [port];
+  const labels   = spyN ? ['Portfolio','S&P 500'] : ['Portfolio'];
+  const colors   = spyN ? ['#111','#2563eb'] : ['#111'];
+  line(labels, datasets, dates, colors);
+}
+
+// ── Ticker search (autocomplete over the full security universe) ────────────────
+let UNIVERSE = [], acActive = null, acMatches = [], acIndex = -1;
+
+async function loadUniverse() {
+  try {
+    const rows = await api('tickers');
+    UNIVERSE = rows.map(r => ({ t: r.ticker, n: r.company_name || '' }));
+  } catch(e) { UNIVERSE = TICKERS.map(t => ({ t, n: '' })); }
+}
+
+// Match on ticker prefix first, then anything containing the query in ticker OR name.
+function acSearch(query) {
+  const qy = query.trim().toUpperCase();
+  if (!qy) return [];
+  const starts = [], contains = [];
+  for (const u of UNIVERSE) {
+    const T = u.t.toUpperCase(), N = u.n.toUpperCase();
+    if (T.startsWith(qy)) starts.push(u);
+    else if (T.includes(qy) || N.includes(qy)) contains.push(u);
+  }
+  return starts.concat(contains).slice(0, 30);
+}
+
+function acEl() {
+  let p = document.getElementById('ac-pop');
+  if (!p) { p = document.createElement('div'); p.id = 'ac-pop'; p.className = 'ac-pop'; document.body.appendChild(p); }
+  return p;
+}
+function showAC(input) {
+  acActive = input; acIndex = -1;
+  acMatches = acSearch(input.value);
+  const p = acEl();
+  if (!acMatches.length) { p.style.display = 'none'; return; }
+  p.innerHTML = acMatches.map((u,i)=>`<div class="ac-item" data-i="${i}"><b>${u.t}</b>${u.n?`<span>${u.n}</span>`:''}</div>`).join('');
+  const r = input.getBoundingClientRect();
+  p.style.left  = (r.left + window.scrollX) + 'px';
+  p.style.top   = (r.bottom + window.scrollY + 3) + 'px';
+  p.style.width = r.width + 'px';
+  p.style.display = 'block';
+}
+function hideAC() { const p = document.getElementById('ac-pop'); if (p) p.style.display = 'none'; acActive = null; acIndex = -1; }
+function hlAC()   { const p = document.getElementById('ac-pop'); if (!p) return; [...p.children].forEach((c,i)=>c.classList.toggle('on', i===acIndex)); }
+function pickAC(i) {
+  if (!acActive || !acMatches[i]) return;
+  acActive.value = acMatches[i].t;
+  acActive.dispatchEvent(new Event('change', {bubbles:true}));  // reuse existing onchange handlers
+  hideAC();
+}
+
+document.addEventListener('input', e => {
+  if (e.target.classList && e.target.classList.contains('ac-input')) showAC(e.target);
+});
+document.addEventListener('keydown', e => {
+  const inp = e.target;
+  if (!inp.classList || !inp.classList.contains('ac-input')) return;
+  const p = document.getElementById('ac-pop');
+  const open = p && p.style.display !== 'none';
+  if      (e.key === 'ArrowDown' && open) { e.preventDefault(); acIndex = Math.min(acIndex+1, acMatches.length-1); hlAC(); }
+  else if (e.key === 'ArrowUp'   && open) { e.preventDefault(); acIndex = Math.max(acIndex-1, 0); hlAC(); }
+  else if (e.key === 'Enter')  { e.preventDefault(); if (open && acIndex>=0) pickAC(acIndex); else { hideAC(); inp.dispatchEvent(new Event('change',{bubbles:true})); } }
+  else if (e.key === 'Escape') hideAC();
+});
+document.addEventListener('mousedown', e => {
+  const p = document.getElementById('ac-pop');
+  const it = e.target.closest && e.target.closest('.ac-item');
+  if (it) { e.preventDefault(); pickAC(+it.dataset.i); return; }
+  if (p && (e.target === p || p.contains(e.target))) return;   // clicking/dragging inside the popup (e.g. its scrollbar)
+  if (!(e.target.classList && e.target.classList.contains('ac-input'))) hideAC();
+});
+// Hide the popup when the page/sidebar scrolls, but NOT when scrolling the popup's own list.
+document.addEventListener('scroll', e => {
+  const p = document.getElementById('ac-pop');
+  if (p && e.target && e.target.nodeType===1 && (e.target === p || p.contains(e.target))) return;
+  hideAC();
+}, true);
+
 // chart helpers
 const COPTS = {
   responsive:true, maintainAspectRatio:false,
@@ -746,11 +1184,13 @@ function line(labels,datasets,xLabels,colors) {
 }
 
 async function init() {
+  if (!pfCustom.length) pfCustom = [{ticker:'AAPL',shares:10,cost:150},{ticker:'MSFT',shares:5,cost:300}];
   setMode('stock');
   try {
     const j = await (await fetch('api.php?q=sectors')).json();
     if (j.rows?.length) SECTORS = j.rows.map(r=>r.sector_name);
   } catch(e) {}
+  await loadUniverse();
   setMode(curMode);
   document.getElementById('init-loader').classList.add('off');
 }

@@ -21,6 +21,63 @@ function q($db, $sql, $types='', $params=[]) {
     echo json_encode(['rows'=>$rows]);
 }
 
+// ── Portfolio helpers ──────────────────────────────────────────────────────────
+// Resolve a portfolio to a map of ticker => ['shares'=>float, 'cost'=>float],
+// either from a saved portfolio (pid) or an ad-hoc "AAPL:10:150,MSFT:5:300" spec.
+function pf_get_holdings($db, $pid, $spec) {
+    if ($pid > 0) {
+        $s = $db->prepare("SELECT sc.ticker, h.shares, h.average_cost
+                           FROM Holding h JOIN Security sc ON sc.security_id = h.security_id
+                           WHERE h.portfolio_id = ?");
+        $s->bind_param('i', $pid); $s->execute();
+        $res = $s->get_result()->fetch_all(MYSQLI_ASSOC); $s->close();
+        $out = [];
+        foreach ($res as $r) $out[strtoupper($r['ticker'])] = ['shares'=>(float)$r['shares'], 'cost'=>(float)$r['average_cost']];
+        return $out;
+    }
+    $out = [];
+    foreach (explode(',', $spec) as $part) {
+        $p = explode(':', $part);
+        if (count($p) < 2) continue;
+        $t = strtoupper(trim($p[0]));
+        if ($t === '') continue;
+        $sh = (float)$p[1];
+        $co = isset($p[2]) ? (float)$p[2] : 0.0;
+        if ($sh <= 0) continue;
+        $out[$t] = ['shares'=>$sh, 'cost'=>$co];  // last spec for a ticker wins
+    }
+    return $out;
+}
+
+// Latest close, sector, company and trailing-12-month dividend/share for a ticker set.
+function pf_reference($db, $tickers) {
+    if (!$tickers) return [];
+    $ph    = implode(',', array_fill(0, count($tickers), '?'));
+    $types = str_repeat('s', count($tickers));
+    $sql = "SELECT s.security_id, s.ticker, s.security_type,
+              c.company_name, sec.sector_name,
+              lp.close AS latest_close,
+              COALESCE(dv.div12, 0) AS div12
+            FROM Security s
+            LEFT JOIN Stock sk    ON sk.security_id = s.security_id
+            LEFT JOIN Company c   ON c.company_id   = sk.company_id
+            LEFT JOIN Industry i  ON i.industry_id  = c.industry_id
+            LEFT JOIN Sector sec  ON sec.sector_id  = i.sector_id
+            LEFT JOIN Price lp    ON lp.security_id = s.security_id
+              AND lp.trade_date = (SELECT MAX(trade_date) FROM Price WHERE security_id = s.security_id)
+            LEFT JOIN (SELECT security_id, SUM(amount) AS div12 FROM Corporate_Action
+                       WHERE action_type = 'dividend' AND action_date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
+                       GROUP BY security_id) dv ON dv.security_id = s.security_id
+            WHERE s.ticker IN ($ph)";
+    $st = $db->prepare($sql);
+    if (!$st) die(json_encode(['error'=>$db->error]));
+    $st->bind_param($types, ...$tickers); $st->execute();
+    $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
+    $map = [];
+    foreach ($rows as $r) $map[strtoupper($r['ticker'])] = $r;
+    return $map;
+}
+
 switch ($q) {
 
 case 'sectors':
@@ -276,6 +333,149 @@ case 'r9':
             ORDER BY avg_daily_vol DESC LIMIT 10",
        'sss', [$sector, $start, $end]);
     break;
+
+case 'tickers':
+    // Full searchable universe (stocks + ETFs) with names, for autocomplete.
+    q($db, "SELECT s.ticker,
+              COALESCE(c.company_name, e.fund_name) AS company_name,
+              s.security_type
+            FROM Security s
+            LEFT JOIN Stock sk  ON sk.security_id = s.security_id
+            LEFT JOIN Company c ON c.company_id   = sk.company_id
+            LEFT JOIN ETF e     ON e.security_id  = s.security_id
+            WHERE s.security_type IN ('stock','etf')
+            ORDER BY s.ticker");
+    break;
+
+case 'portfolios': {
+    // Returns the shared sample portfolios plus the requesting owner's own saved
+    // portfolios. User portfolios are identified by a 'u:'-prefixed owner_name,
+    // so one user never sees another user's saved portfolios.
+    $owner = trim($_GET['owner'] ?? '');
+    q($db, "SELECT p.portfolio_id, p.portfolio_name, p.owner_name,
+              (p.owner_name NOT LIKE 'u:%') AS is_sample,
+              COUNT(h.security_id) AS holdings
+            FROM Portfolio p LEFT JOIN Holding h ON h.portfolio_id = p.portfolio_id
+            WHERE p.owner_name NOT LIKE 'u:%' OR p.owner_name = ?
+            GROUP BY p.portfolio_id, p.portfolio_name, p.owner_name
+            ORDER BY is_sample DESC, p.portfolio_id",
+       's', [$owner]);
+    break;
+}
+
+case 'pf_holdings': {
+    $pid  = (int)($_GET['pid'] ?? 0);
+    $spec = $_GET['holdings'] ?? '';
+    $H    = pf_get_holdings($db, $pid, $spec);
+    $ref  = pf_reference($db, array_keys($H));
+    $rows = [];
+    foreach ($H as $t => $h) {
+        $r     = $ref[$t] ?? null;
+        $price = ($r && $r['latest_close'] !== null) ? (float)$r['latest_close'] : null;
+        $mv    = $price !== null ? $price * $h['shares'] : null;
+        $cb    = $h['cost'] * $h['shares'];
+        $pl    = $mv !== null ? $mv - $cb : null;
+        $name  = $r ? ($r['company_name'] ?? ($r['security_type'] === 'etf' ? 'ETF' : null)) : null;
+        $sect  = $r ? ($r['sector_name']  ?? ($r['security_type'] === 'etf' ? 'ETF / Fund' : 'Other')) : 'Unknown ticker';
+        $rows[] = [
+            'ticker'            => $t,
+            'company_name'      => $name,
+            'sector_name'       => $sect,
+            'shares'            => round($h['shares'], 4),
+            'avg_cost'          => round($h['cost'], 4),
+            'latest_close'      => $price !== null ? round($price, 2) : null,
+            'market_value'      => $mv !== null ? round($mv, 2) : null,
+            'cost_basis'        => round($cb, 2),
+            'unrealized_pl'     => $pl !== null ? round($pl, 2) : null,
+            'unrealized_pl_pct' => ($mv !== null && $cb > 0) ? round($pl / $cb * 100, 2) : null,
+            'div_income_12mo'   => $r ? round((float)$r['div12'] * $h['shares'], 2) : 0,
+        ];
+    }
+    echo json_encode(['rows'=>$rows]);
+    break;
+}
+
+case 'pf_series': {
+    $pid  = (int)($_GET['pid'] ?? 0);
+    $spec = $_GET['holdings'] ?? '';
+    $H    = pf_get_holdings($db, $pid, $spec);
+    $ref  = pf_reference($db, array_keys($H));
+    $pairs = [];
+    foreach ($H as $t => $h) {
+        if (isset($ref[$t]) && $ref[$t]['security_id'] !== null)
+            $pairs[] = [(int)$ref[$t]['security_id'], (float)$h['shares']];
+    }
+    if (!$pairs) { echo json_encode(['rows'=>[]]); break; }
+    // Portfolio market value per trading day = SUM(shares_i * close_i(date)).
+    // Holdings are injected as a small (security_id, shares) derived table.
+    $union  = implode(' UNION ALL ', array_fill(0, count($pairs), 'SELECT ? AS security_id, ? AS shares'));
+    $types  = ''; $params = [];
+    foreach ($pairs as $pr) { $types .= 'id'; $params[] = $pr[0]; $params[] = $pr[1]; }
+    $types .= 'ss'; $params[] = $start; $params[] = $end;
+    $sql = "SELECT p.trade_date, ROUND(SUM(p.close * h.shares), 2) AS port_value
+            FROM Price p
+            JOIN ($union) h ON h.security_id = p.security_id
+            WHERE p.trade_date BETWEEN ? AND ?
+            GROUP BY p.trade_date ORDER BY p.trade_date";
+    $st = $db->prepare($sql);
+    if (!$st) die(json_encode(['error'=>$db->error]));
+    $st->bind_param($types, ...$params); $st->execute();
+    $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
+    echo json_encode(['rows'=>$rows]);
+    break;
+}
+
+case 'pf_save': {
+    // Create or update a user-owned portfolio (owner must be a 'u:' key).
+    $owner = trim($_POST['owner'] ?? '');
+    $name  = trim($_POST['name'] ?? '');
+    $spec  = $_POST['holdings'] ?? '';
+    $pid   = (int)($_POST['pid'] ?? 0);
+    if (strpos($owner, 'u:') !== 0) { echo json_encode(['error'=>'invalid owner']); break; }
+    if ($name === '') $name = 'My Portfolio';
+    $H = pf_get_holdings($db, 0, $spec);
+    if (!$H) { echo json_encode(['error'=>'no valid holdings']); break; }
+    $ref = pf_reference($db, array_keys($H));
+
+    if ($pid > 0) {
+        $chk = $db->prepare("SELECT owner_name FROM Portfolio WHERE portfolio_id = ?");
+        $chk->bind_param('i', $pid); $chk->execute();
+        $row = $chk->get_result()->fetch_assoc(); $chk->close();
+        if (!$row || $row['owner_name'] !== $owner) { echo json_encode(['error'=>'not your portfolio']); break; }
+        $u = $db->prepare("UPDATE Portfolio SET portfolio_name = ? WHERE portfolio_id = ?");
+        $u->bind_param('si', $name, $pid); $u->execute(); $u->close();
+        $d = $db->prepare("DELETE FROM Holding WHERE portfolio_id = ?");
+        $d->bind_param('i', $pid); $d->execute(); $d->close();
+    } else {
+        $ins = $db->prepare("INSERT INTO Portfolio (portfolio_name, owner_name) VALUES (?, ?)");
+        $ins->bind_param('ss', $name, $owner); $ins->execute();
+        $pid = $ins->insert_id; $ins->close();
+    }
+
+    $hi = $db->prepare("INSERT INTO Holding (portfolio_id, security_id, shares, average_cost) VALUES (?, ?, ?, ?)");
+    $saved = 0;
+    foreach ($H as $t => $h) {
+        if (!isset($ref[$t]) || $ref[$t]['security_id'] === null) continue;
+        $sh = (float)$h['shares']; if ($sh <= 0) continue;
+        $sid = (int)$ref[$t]['security_id']; $co = (float)max(0, $h['cost']);
+        $hi->bind_param('iidd', $pid, $sid, $sh, $co); $hi->execute(); $saved++;
+    }
+    $hi->close();
+    echo json_encode(['ok'=>true, 'pid'=>$pid, 'saved'=>$saved]);
+    break;
+}
+
+case 'pf_delete': {
+    $owner = trim($_POST['owner'] ?? '');
+    $pid   = (int)($_POST['pid'] ?? 0);
+    if (strpos($owner, 'u:') !== 0 || $pid <= 0) { echo json_encode(['error'=>'bad request']); break; }
+    // Ownership enforced in WHERE; Holding rows cascade via the FK.
+    $d = $db->prepare("DELETE FROM Portfolio WHERE portfolio_id = ? AND owner_name = ?");
+    $d->bind_param('is', $pid, $owner); $d->execute();
+    $aff = $d->affected_rows; $d->close();
+    echo json_encode(['ok'=>true, 'deleted'=>$aff]);
+    break;
+}
 
 default:
     echo json_encode(['error'=>"unknown query: $q"]);
