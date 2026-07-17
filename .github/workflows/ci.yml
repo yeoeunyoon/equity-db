@@ -1,0 +1,139 @@
+name: CI
+
+# Fast smoke test: build the schema, load the COMMITTED sample data in
+# data/*.tsv, and run a few sanity queries. This does NOT call yfinance
+# (the live network fetch is flaky in CI) — it only exercises the SQL.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: equity_db
+          MYSQL_USER: equity
+          MYSQL_PASSWORD: equity
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      # Connection helpers for the mysql client (TCP to the service container).
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: equity_db
+      DB_USER: equity
+      DB_PASS: equity
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -uroot -proot --silent; then
+              echo "MySQL is up."
+              exit 0
+            fi
+            echo "Waiting for MySQL... ($i)"
+            sleep 2
+          done
+          echo "MySQL did not become ready in time." >&2
+          exit 1
+
+      - name: Enable LOCAL INFILE on the server
+        run: |
+          # LOAD DATA LOCAL INFILE needs the server-side global enabled;
+          # this requires root (equity user lacks SYSTEM_VARIABLES_ADMIN).
+          mysql -h "$DB_HOST" -P "$DB_PORT" -uroot -proot \
+            -e "SET GLOBAL local_infile = 1;"
+
+      - name: Create schema (setup.sql)
+        run: |
+          mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" \
+            "$DB_NAME" < setup.sql
+
+      - name: Load committed sample data (load.sql)
+        run: |
+          # load.sql uses LOAD DATA LOCAL INFILE against data/*.tsv;
+          # run from the repo root so the relative paths resolve.
+          mysql --local-infile=1 -h "$DB_HOST" -P "$DB_PORT" \
+            -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < load.sql
+
+      - name: Sanity queries (fail if any returns no rows)
+        run: |
+          set -euo pipefail
+
+          # Run a query and fail the job if it returns zero data rows.
+          # -N drops the header row, -B gives tab-separated batch output.
+          assert_rows() {
+            local label="$1"; local sql="$2"
+            local out
+            out=$(mysql -N -B -h "$DB_HOST" -P "$DB_PORT" \
+                    -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "$sql")
+            local n
+            n=$(printf '%s' "$out" | grep -c . || true)
+            if [ "$n" -eq 0 ]; then
+              echo "FAIL: [$label] returned no rows" >&2
+              exit 1
+            fi
+            echo "OK:   [$label] returned $n row(s)"
+          }
+
+          # Q06 (from queries.sql): historical P/E, EPS, beta for a stock.
+          assert_rows "Q06 snapshots for AAPL" "
+            SELECT fs.snapshot_date, fs.pe_ratio, fs.eps, fs.beta
+            FROM Financial_Snapshot fs
+            JOIN Security sec ON sec.security_id = fs.security_id
+            WHERE sec.ticker = 'AAPL'
+            ORDER BY fs.snapshot_date;"
+
+          # Q10 (from queries.sql): most volatile Technology stocks.
+          # Date range parameter swapped to match the committed 2025 sample.
+          assert_rows "Q10 volatile Technology stocks" "
+            SELECT sec.ticker, c.company_name,
+                   ROUND(STDDEV_POP(pr.close), 2) AS price_stddev,
+                   COUNT(pr.trade_date) AS trading_days
+            FROM Sector s
+            JOIN Industry i ON i.sector_id = s.sector_id
+            JOIN Company c ON c.industry_id = i.industry_id
+            JOIN Stock st ON st.company_id = c.company_id
+            JOIN Security sec ON sec.security_id = st.security_id
+            JOIN Price pr ON pr.security_id = sec.security_id
+            WHERE s.sector_name = 'Technology'
+              AND pr.trade_date BETWEEN '2025-01-01' AND '2025-12-31'
+            GROUP BY sec.security_id, sec.ticker, c.company_name
+            ORDER BY price_stddev DESC
+            LIMIT 10;"
+
+          # Q14 (from queries.sql): avg/min/max beta by industry in a sector.
+          assert_rows "Q14 beta by industry (Technology)" "
+            SELECT i.industry_name,
+                   COUNT(DISTINCT c.company_id) AS company_count,
+                   ROUND(AVG(fs.beta), 4) AS avg_beta
+            FROM Sector s
+            JOIN Industry i ON i.sector_id = s.sector_id
+            JOIN Company c ON c.industry_id = i.industry_id
+            JOIN Stock st ON st.company_id = c.company_id
+            JOIN Financial_Snapshot fs ON fs.security_id = st.security_id
+            WHERE s.sector_name = 'Technology'
+              AND fs.beta IS NOT NULL
+              AND fs.snapshot_date = (
+                  SELECT MAX(snapshot_date) FROM Financial_Snapshot
+                  WHERE security_id = st.security_id)
+            GROUP BY i.industry_id, i.industry_name
+            ORDER BY avg_beta DESC;"
+
+          echo "All sanity queries returned rows."

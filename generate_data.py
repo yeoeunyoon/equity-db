@@ -1,5 +1,30 @@
 #!/usr/bin/env python3
-import os, csv
+"""Generate TSV data files for the Equity Market Intelligence database.
+
+Curated reference tables (sectors, industries, companies, exchanges,
+securities, portfolios, holdings, option contracts) are hard-coded, while
+price / snapshot / ETF / option / corporate-action data is pulled LIVE from
+Yahoo Finance via the yfinance library. Output is written as tab-separated
+files to ./data/ for bulk loading with load.sql.
+
+The price date range is dynamic. Precedence is CLI flag > environment
+variable > default. Defaults: --end is today, --start is three years ago.
+SNAPSHOT_DATE is always set to the end date.
+
+Usage:
+    # Default: last 3 years through today
+    python3 generate_data.py
+
+    # Explicit range via CLI flags
+    python3 generate_data.py --start 2024-01-01 --end 2024-12-31
+
+    # Explicit range via environment variables
+    PRICE_START=2024-01-01 PRICE_END=2024-12-31 python3 generate_data.py
+
+Requirements: pip install -r requirements.txt  (yfinance, pandas)
+"""
+import os, csv, argparse
+from datetime import date
 
 import yfinance as yf
 import pandas as pd
@@ -7,9 +32,33 @@ import pandas as pd
 OUTPUT_DIR = "data"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-PRICE_START = "2025-01-02"
-PRICE_END = "2025-03-28"
-SNAPSHOT_DATE = "2025-03-28"
+
+def _default_dates():
+    today = date.today()
+    try:
+        start = today.replace(year=today.year - 3)
+    except ValueError:  # Feb 29 -> Feb 28 three years back
+        start = today.replace(year=today.year - 3, day=28)
+    return start.isoformat(), today.isoformat()
+
+
+_default_start, _default_end = _default_dates()
+
+parser = argparse.ArgumentParser(
+    description="Generate equity-db TSV files using live Yahoo Finance data.")
+parser.add_argument("--start", default=os.environ.get("PRICE_START"),
+                    help="Price history start date YYYY-MM-DD "
+                         "(env PRICE_START; default: 3 years ago).")
+parser.add_argument("--end", default=os.environ.get("PRICE_END"),
+                    help="Price history end date YYYY-MM-DD "
+                         "(env PRICE_END; default: today).")
+args = parser.parse_args()
+
+PRICE_START = args.start or _default_start
+PRICE_END = args.end or _default_end
+SNAPSHOT_DATE = PRICE_END
+
+print(f"Fetching price/snapshot data for {PRICE_START} .. {PRICE_END}")
 
 def write_tsv(filename, rows, header):
     path = os.path.join(OUTPUT_DIR, filename)

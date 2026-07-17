@@ -5,11 +5,14 @@ Equity Market Intelligence & Portfolio Analysis Database
 
 OVERVIEW
 --------
-Data for this database was generated and cleaned using a Python script
+Data for this database is generated and cleaned using a Python script
 (generate_data.py) that produces TSV files for bulk loading into MySQL.
-Where possible, data values reflect real-world financial figures for
-the 25 selected S&P 500 companies, 5 major ETFs, and 5 sample option
-contracts.
+Curated reference tables (sectors, industries, companies, exchanges,
+securities, portfolios, holdings) are hard-coded from public references,
+while price, financial snapshot, ETF, option, and corporate-action data
+is pulled LIVE from Yahoo Finance via the yfinance Python library. The
+25 selected S&P 500 companies, 5 major ETFs, and 5 sample option
+contracts therefore reflect real market data over the requested date range.
 
 DATA SOURCES
 ------------
@@ -37,43 +40,35 @@ DATA SOURCES
    - Cleaning: None needed; only 3 exchanges.
 
 4. Price (OHLCV) data
-   - Source: Could be obtained via yfinance Python library
+   - Source: Pulled LIVE from Yahoo Finance via the yfinance Python library.
      URL: https://pypi.org/project/yfinance/
-     Command: yfinance.download("AAPL", start="2025-01-02", end="2025-03-28")
+     Command: yfinance.download(tickers, start=PRICE_START, end=PRICE_END,
+                                group_by="ticker", auto_adjust=False)
    - Format: yfinance returns a pandas DataFrame with columns:
      Date, Open, High, Low, Close, Adj Close, Volume
-   - For this submission: Generated programmatically using a random walk
-     model seeded at realistic base prices per security, with daily
-     returns drawn from N(0.0003, 0.015). This produces realistic price
-     movement patterns.
-   - Cleaning steps that would apply to real yfinance data:
-     * Drop "Adj Close" column (not in our schema)
-     * Rename "Date" -> "trade_date"
-     * Remove any rows with NaN values (holidays where market was closed
-       but yfinance returns NaN)
-     * Remove duplicate date entries if any
+   - Date range: driven by the --start/--end CLI flags (or PRICE_START/
+     PRICE_END env vars); defaults to the last 3 years through today.
+   - Cleaning steps applied to the live yfinance data:
+     * Keep only Open, High, Low, Close, Volume (Adj Close not in schema)
+     * Use the DataFrame index (Date) as trade_date
+     * Drop rows with NaN Close (holidays where the market was closed)
      * Round prices to 4 decimal places
-     * Verify volume is non-negative integer
+     * Coerce volume to a non-negative integer (0 when missing)
      * Map ticker to security_id via lookup table
 
 5. Financial Snapshot data
-   - Source: Could be obtained from yfinance Ticker.info dict
+   - Source: Pulled LIVE from the yfinance Ticker.info dict.
      Fields: marketCap, trailingPE, trailingEps, beta
-   - For this submission: Generated with randomized but realistic ranges:
-     * market_cap: base_price * random(500-3000) * 1,000,000
-     * pe_ratio: uniform(10, 60)
-     * eps: derived as price / pe_ratio
-     * beta: uniform(0.5, 2.0)
-   - Cleaning: One snapshot per security as of 2025-03-28.
+   - Cleaning: pe_ratio rounded to 2 decimals, eps/beta to 4 decimals;
+     missing fields stored as NULL. One snapshot per security, dated with
+     the --end date (SNAPSHOT_DATE).
 
 6. Corporate Action data
-   - Source: Could be obtained from yfinance Ticker.dividends and
-     Ticker.splits history.
-   - For this submission: Manually curated 12 representative events
-     including dividends for major dividend payers (KO, JNJ, PG, JPM,
-     XOM, MCD, UNH, V, PFE, MSFT, AAPL) and one stock split (NVDA).
-   - Cleaning: Verified action_type values match ENUM constraints.
-     Verified amounts are positive.
+   - Source: Pulled LIVE from yfinance Ticker.dividends and Ticker.splits
+     history, filtered to the requested PRICE_START..PRICE_END window.
+   - Cleaning: Dividends recorded as action_type 'dividend'; splits mapped
+     to 'split' (ratio > 1) or 'reverse_split' (ratio < 1) to satisfy the
+     ENUM constraint. Amounts rounded to 6 decimals.
 
 7. Portfolio & Holding data
    - Source: Fabricated for demonstration purposes.
@@ -85,15 +80,18 @@ DATA SOURCES
      table. Verified shares > 0 and average_cost >= 0.
 
 8. ETF data
-   - Source: Fund names and expense ratios from etf.com and fund
-     prospectuses.
+   - Source: Fund name and expense ratio pulled LIVE from the yfinance
+     Ticker.info dict (longName/shortName, annualReportExpenseRatio),
+     with hard-coded fallbacks used only if the live lookup fails.
    - Cleaning: Expense ratios expressed as percentages (e.g., 0.0945
      for SPY = 9.45 basis points). Verified non-negative.
 
 9. Option Contract data
-   - Source: Option ticker symbology follows OCC standard format.
-   - 5 sample contracts: calls and puts on AAPL, MSFT, TSLA, SPY.
-   - Implied volatility and open interest values are representative.
+   - Source: 5 sample contracts (calls/puts on AAPL, MSFT, TSLA, SPY),
+     ticker symbology per OCC standard format. Implied volatility and
+     open interest are pulled LIVE from the yfinance option_chain() for
+     the matching strike/expiration, with hard-coded fallbacks used only
+     if the live lookup fails.
    - Cleaning: Verified strike_price > 0, open_interest >= 0.
 
 FILE FORMAT
@@ -107,18 +105,30 @@ NULL values: represented as empty string
 
 SCRIPT USAGE
 ------------
-1. Run: python3 generate_data.py
-2. Output: 13 TSV files in ./data/ directory
-3. Load: mysql -u <user> -p <db> --local-infile=1 < load.sql
+0. Install dependencies: pip install -r requirements.txt   (yfinance, pandas)
 
-To replace generated data with real yfinance data:
-1. pip install yfinance pandas
-2. Modify generate_data.py to call yfinance.download() for Price data
-   and yfinance.Ticker("AAPL").info for Financial Snapshot data
-3. Re-run the script
+1. Run (defaults to the last 3 years of live data through today):
+     python3 generate_data.py
+
+   Choose an explicit price date range via CLI flags:
+     python3 generate_data.py --start 2024-01-01 --end 2024-12-31
+
+   ...or via environment variables (CLI flags take precedence):
+     PRICE_START=2024-01-01 PRICE_END=2024-12-31 python3 generate_data.py
+
+   Notes:
+     * --end (env PRICE_END) defaults to today.
+     * --start (env PRICE_START) defaults to three years before today.
+     * SNAPSHOT_DATE is always set to the end date.
+
+2. Output: 13 TSV files in ./data/ directory.
+3. Load:  mysql -u <user> -p <db> --local-infile=1 < load.sql
 
 ROW COUNTS
 ----------
+Curated reference tables have fixed row counts; the live tables (price,
+financial_snapshot, corporate_action) vary with the requested date range.
+
 sector.tsv               11 rows
 industry.tsv             20 rows
 company.tsv              25 rows
@@ -129,8 +139,6 @@ etf.tsv                   5 rows
 option_contract.tsv       5 rows
 portfolio.tsv             5 rows
 holding.tsv              25 rows
-price.tsv             1,800 rows  (30 securities x 60 trading days)
-financial_snapshot.tsv   25 rows
-corporate_action.tsv     12 rows
-                      --------
-TOTAL                 1,996 rows
+price.tsv             varies  (30 securities x trading days in range)
+financial_snapshot.tsv   25 rows  (one snapshot per stock)
+corporate_action.tsv  varies  (dividends + splits within the range)
