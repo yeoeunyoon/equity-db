@@ -5,34 +5,61 @@
 <title>Market Explorer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+:root { --bg:#fff; --panel:#fafafa; --line:#e6e6e6; --ink:#111; --muted:#6b7280; --faint:#9ca3af; --faintest:#c4c9d0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; font-size: 13px; background: #fff; color: #111; }
-.shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
-.sidebar { border-right: 1px solid #ddd; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
-.mode-tabs { display: flex; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
-.mode-tab { flex: 1; padding: 7px 4px; text-align: center; cursor: pointer; border: none; background: none; font-size: 12px; color: #555; border-right: 1px solid #ddd; }
-.mode-tab:last-child { border-right: none; }
-.mode-tab.active { background: #111; color: #fff; }
-.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
-.ctrl-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .05em; }
-select, input[type=text] { width: 100%; padding: 5px 7px; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; color: #111; background: #fff; outline: none; }
-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 0l4 4 4-4z' fill='%23999'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 22px; cursor: pointer; }
-select:focus, input:focus { border-color: #111; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; background: var(--bg); color: var(--ink); }
+.topbar { display: flex; align-items: baseline; gap: 12px; padding: 13px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.brand-sub { font-size: 12px; color: var(--faint); }
+.shell { display: grid; grid-template-columns: 290px 1fr; min-height: calc(100vh - 51px); }
+.sidebar { border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 18px; background: var(--panel); }
+.section-label { font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+.mode-tabs { display: flex; flex-direction: column; gap: 6px; }
+.mode-tab { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; position: relative; }
+.mode-tab .mode-ic { position: absolute; right: 11px; top: 10px; font-size: 15px; opacity: .75; }
+.mode-tab .mode-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.mode-tab .mode-desc { font-size: 11px; color: var(--muted); }
+.mode-tab:hover { border-color: #cfcfcf; }
+.mode-tab.active { background: var(--ink); border-color: var(--ink); }
+.mode-tab.active .mode-name { color: #fff; }
+.mode-tab.active .mode-desc { color: #c9c9c9; }
+.mode-tab.active .mode-ic { opacity: 1; }
+.ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+.ctrl-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+select, input[type=text] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; color: var(--ink); background: #fff; outline: none; }
+select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 0l4 4 4-4z' fill='%23999'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 24px; cursor: pointer; }
+select:focus, input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(17,17,17,.06); }
 input[type=text] { text-transform: uppercase; }
-input::placeholder { text-transform: none; color: #bbb; }
-.range-pills { display: flex; gap: 4px; flex-wrap: wrap; }
-.rpill { font-size: 11px; padding: 3px 8px; border: 1px solid #ddd; border-radius: 3px; background: none; color: #555; cursor: pointer; }
-.rpill.active { background: #111; border-color: #111; color: #fff; }
-.divider { height: 1px; background: #eee; margin: 2px 0; }
-.query-list { display: flex; flex-direction: column; gap: 1px; }
-.qitem { padding: 6px 8px; border-radius: 3px; cursor: pointer; font-size: 12px; color: #444; border: 1px solid transparent; line-height: 1.35; }
-.qitem:hover { background: #f0f0f0; }
-.qitem.active { background: #f0f0f0; border-color: #ddd; color: #111; font-weight: 500; }
-.run-btn { width: 100%; padding: 7px; background: #111; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer; margin-top: 2px; }
+input::placeholder { text-transform: none; color: var(--faintest); }
+.range-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.rpill { font-size: 12px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); cursor: pointer; }
+.rpill:hover { border-color: #cfcfcf; }
+.rpill.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.divider { height: 1px; background: var(--line); margin: 2px 0; }
+.query-list { display: flex; flex-direction: column; gap: 6px; }
+.qitem { padding: 9px 11px; border-radius: 8px; cursor: pointer; border: 1px solid var(--line); background: #fff; line-height: 1.3; }
+.qitem:hover { border-color: #cfcfcf; }
+.qitem .qi-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.qitem .qi-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.qitem.active { border-color: var(--ink); box-shadow: inset 3px 0 0 var(--ink); }
+.run-btn { width: 100%; padding: 9px; background: var(--ink); color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .run-btn:hover { background: #333; }
 .run-btn:disabled { background: #bbb; cursor: not-allowed; }
 .main { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
-.empty { display: flex; align-items: center; justify-content: center; min-height: 60vh; color: #ccc; font-size: 13px; }
+.empty { display: flex; align-items: flex-start; justify-content: center; min-height: 60vh; padding-top: 8vh; }
+.empty-card { max-width: 460px; }
+.empty-icon { font-size: 34px; }
+.empty-title { font-size: 18px; font-weight: 650; color: var(--ink); margin-top: 10px; }
+.empty-lead { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.55; }
+.empty-steps { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.empty-step { display: flex; gap: 11px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.empty-num { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.empty-step em { font-style: normal; color: var(--muted); }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  .main { padding: 16px; }
+}
 .sql-block { border: 1px solid #eee; border-radius: 3px; overflow: hidden; }
 .sql-header { display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #fafafa; border-bottom: 1px solid #eee; }
 .sql-header span { font-size: 11px; color: #aaa; }
@@ -72,27 +99,75 @@ tbody tr:hover td { background: #fafafa; }
 </style>
 </head>
 <body>
+<header class="topbar">
+  <div class="brand">📈 Market Explorer</div>
+  <div class="brand-sub">Equity analytics — pick a view, set parameters, choose an analysis</div>
+</header>
 <div class="shell">
   <aside class="sidebar">
-    <div class="mode-tabs">
-      <button class="mode-tab active" onclick="setMode('stock')" id="tab-stock">Stock</button>
-      <button class="mode-tab" onclick="setMode('sector')" id="tab-sector">Sector</button>
+    <div>
+      <div class="section-label">Step 1 · Choose a view</div>
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="setMode('stock')" id="tab-stock">
+          <span class="mode-ic">📊</span>
+          <span class="mode-name">Single Stock</span>
+          <span class="mode-desc">Analyze one company over time</span>
+        </button>
+        <button class="mode-tab" onclick="setMode('sector')" id="tab-sector">
+          <span class="mode-ic">🏛️</span>
+          <span class="mode-name">Sector &amp; Market</span>
+          <span class="mode-desc">Compare across the whole market</span>
+        </button>
+      </div>
     </div>
-    <div id="ctrl-area"></div>
+    <div id="ctrl-area" style="display:flex;flex-direction:column;gap:18px;"></div>
   </aside>
   <main class="main">
-    <div class="empty" id="empty">Select an analysis from the left panel.</div>
+    <div class="empty" id="empty">
+      <div class="empty-card">
+        <div class="empty-icon">👋</div>
+        <div class="empty-title">Welcome to Market Explorer</div>
+        <div class="empty-lead">Explore live equity-market data — prices, volatility, valuations, dividends and more — without writing any SQL.</div>
+        <div class="empty-steps">
+          <div class="empty-step"><span class="empty-num">1</span><span><b>Choose a view</b> — <em>Single Stock</em> for one company, or <em>Sector &amp; Market</em> to compare across the market.</span></div>
+          <div class="empty-step"><span class="empty-num">2</span><span><b>Set parameters</b> — a ticker or sector, plus a date range.</span></div>
+          <div class="empty-step"><span class="empty-num">3</span><span><b>Click an analysis</b> — it runs automatically and shows a table, chart, and the SQL behind it.</span></div>
+        </div>
+      </div>
+    </div>
     <div id="result-root" style="display:none;flex-direction:column;gap:14px;"></div>
   </main>
 </div>
 <div class="init-loader" id="init-loader"><div class="spinner"></div>Connecting&hellip;</div>
 
 <script>
-let curMode='stock', curQid=null, curData=null, chartInst=null, curRange='1y';
+let curMode='stock', curQid=null, curData=null, chartInst=null, curRange='1y', shown=false;
 let SECTORS = ['Technology','Healthcare','Financial Services','Consumer Discretionary',
                'Energy','Industrials','Communication Services','Consumer Staples',
                'Utilities','Real Estate','Materials'];
 const RANGE_DAYS = {'3m':90,'6m':180,'1y':365,'3y':1095,'5y':1825};
+// Symbols available in the database — offered as ticker autocomplete suggestions.
+const TICKERS = ['AAPL','MSFT','NVDA','GOOGL','AMZN','META','TSLA','JNJ','JPM','XOM',
+                 'UNH','V','PG','KO','PFE','BA','INTC','CRM','MCD','NFLX','AMD','AVGO',
+                 'ADBE','COST','BRK-B','SPY','QQQ','IWM','VTI','XLK'];
+// Plain-English descriptions shown under each analysis so users know what it does.
+const DESC = {
+  s1:'Closing price and day-over-day % change',
+  s2:'How much the stock swings (annualized, 30-day window)',
+  s3:'Implied volatility of calls vs puts by expiry',
+  s4:'Dividends & splits with price 7 days before/after',
+  s5:'Total return compared with the S&P 500',
+  s6:'P/E, EPS, beta and market-cap history',
+  r1:'Average return of each sector vs the S&P 500',
+  r2:'Valuation (P/E) across industries in the sector',
+  r3:'Companies with the longest EPS-growth streaks',
+  r4:'Highest-volatility names in the sector',
+  r5:'Share of companies cheaper than their industry',
+  r6:'Highest trailing dividend yields in the sector',
+  r7:'Companies grouped by market-cap tier',
+  r8:'Market sensitivity (beta) across industries',
+  r9:'Most heavily traded names by average daily volume'
+};
 
 // helpers
 const fmt  = (n,d=2) => n==null?'':Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -454,41 +529,55 @@ ORDER BY avg_daily_vol DESC LIMIT 10;`,
 // ── UI Templates ─────────────────────────────────────────────────────────────
 function stockCtrl() {
   return `
-    <div class="ctrl-group"><div class="ctrl-label">Ticker</div>
-      <input type="text" id="ctrl-ticker" placeholder="e.g. AAPL" value="AAPL"></div>
-    <div class="ctrl-group"><div class="ctrl-label">Date Range</div>
-      <div class="range-pills">
-        <button class="rpill" onclick="setRange('3m',this)">3M</button>
-        <button class="rpill" onclick="setRange('6m',this)">6M</button>
-        <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
-        <button class="rpill" onclick="setRange('3y',this)">3Y</button>
-        <button class="rpill" onclick="setRange('5y',this)">5Y</button>
-      </div></div>
-    <div class="divider"></div>
-    <div class="ctrl-label">Analysis</div>
-    <div class="query-list" id="qlist"></div>
-    <button class="run-btn" onclick="runQuery()">Run</button>`;
+    <div>
+      <div class="section-label">Step 2 · Set parameters</div>
+      <div class="ctrl-group"><div class="ctrl-label">Ticker</div>
+        <input type="text" id="ctrl-ticker" list="ticker-list" autocomplete="off"
+               placeholder="Type or pick, e.g. AAPL" value="AAPL"
+               onchange="reRun()" onkeydown="if(event.key==='Enter'){event.preventDefault();reRun();}">
+        <datalist id="ticker-list">${TICKERS.map(t=>`<option value="${t}"></option>`).join('')}</datalist>
+      </div>
+      <div class="ctrl-group" style="margin-top:12px;"><div class="ctrl-label">Date range</div>
+        <div class="range-pills">
+          <button class="rpill" onclick="setRange('3m',this)">3M</button>
+          <button class="rpill" onclick="setRange('6m',this)">6M</button>
+          <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
+          <button class="rpill" onclick="setRange('3y',this)">3Y</button>
+          <button class="rpill" onclick="setRange('5y',this)">5Y</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="section-label">Step 3 · Pick an analysis</div>
+      <div class="query-list" id="qlist"></div>
+    </div>
+    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
 }
 function sectorCtrl() {
   return `
-    <div class="ctrl-group"><div class="ctrl-label">Sector</div>
-      <select id="ctrl-sector">${SECTORS.map(s=>`<option>${s}</option>`).join('')}</select></div>
-    <div class="ctrl-group"><div class="ctrl-label">Min EPS Growth Qtrs</div>
-      <select id="ctrl-min_q">
-        <option value="4" selected>4</option><option value="5">5</option>
-        <option value="6">6</option><option value="7">7</option>
-      </select></div>
-    <div class="ctrl-group"><div class="ctrl-label">Date Range</div>
-      <div class="range-pills">
-        <button class="rpill" onclick="setRange('6m',this)">6M</button>
-        <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
-        <button class="rpill" onclick="setRange('3y',this)">3Y</button>
-        <button class="rpill" onclick="setRange('5y',this)">5Y</button>
-      </div></div>
-    <div class="divider"></div>
-    <div class="ctrl-label">Analysis</div>
-    <div class="query-list" id="qlist"></div>
-    <button class="run-btn" onclick="runQuery()">Run</button>`;
+    <div>
+      <div class="section-label">Step 2 · Set parameters</div>
+      <div class="ctrl-group"><div class="ctrl-label">Sector</div>
+        <select id="ctrl-sector" onchange="reRun()">${SECTORS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      <div class="ctrl-group" style="margin-top:12px;"><div class="ctrl-label">Min EPS-growth quarters</div>
+        <select id="ctrl-min_q" onchange="reRun()">
+          <option value="4" selected>4</option><option value="5">5</option>
+          <option value="6">6</option><option value="7">7</option>
+        </select></div>
+      <div class="ctrl-group" style="margin-top:12px;"><div class="ctrl-label">Date range</div>
+        <div class="range-pills">
+          <button class="rpill" onclick="setRange('6m',this)">6M</button>
+          <button class="rpill active" onclick="setRange('1y',this)">1Y</button>
+          <button class="rpill" onclick="setRange('3y',this)">3Y</button>
+          <button class="rpill" onclick="setRange('5y',this)">5Y</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="section-label">Step 3 · Pick an analysis</div>
+      <div class="query-list" id="qlist"></div>
+    </div>
+    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
 }
 const MODES = {
   stock:  {keys:['s1','s2','s3','s4','s5','s6'],           ctrl:stockCtrl},
@@ -496,26 +585,42 @@ const MODES = {
 };
 
 function setMode(m) {
-  curMode=m; curQid=null;
+  curMode=m; curQid=null; shown=false;
+  if (chartInst) { chartInst.destroy(); chartInst=null; }
   document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+m).classList.add('active');
   document.getElementById('ctrl-area').innerHTML = MODES[m].ctrl();
   const keys = MODES[m].keys;
   document.getElementById('qlist').innerHTML = keys.map(k=>
-    `<div class="qitem" id="qi-${k}" onclick="selQ('${k}')">${Q[k].label}</div>`).join('');
-  selQ(keys[0]);
+    `<div class="qitem" id="qi-${k}" onclick="selQ('${k}')">
+       <div class="qi-title">${Q[k].label}</div>
+       <div class="qi-desc">${DESC[k]||''}</div>
+     </div>`).join('');
+  // Switching view returns to the welcome screen; highlight the first analysis
+  // without running it, so the user stays oriented.
+  document.getElementById('result-root').style.display='none';
+  document.getElementById('empty').style.display='flex';
+  selQ(keys[0], false);
 }
 
-function selQ(k) {
+function selQ(k, run=true) {
   curQid=k;
   document.querySelectorAll('.qitem').forEach(e=>e.classList.remove('active'));
   document.getElementById('qi-'+k)?.classList.add('active');
+  if (run) runQuery();   // clicking an analysis runs it immediately
 }
 
 function setRange(r,btn) {
   curRange=r;
   btn.closest('.range-pills').querySelectorAll('.rpill').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  reRun();
+}
+
+// Re-run the current analysis after a parameter change, but only once results
+// are already on screen (so changing inputs on the welcome screen does nothing).
+function reRun() {
+  if (shown && curQid) runQuery();
 }
 
 async function runQuery() {
@@ -524,6 +629,7 @@ async function runQuery() {
   const btn = document.querySelector('.run-btn');
   if (btn) btn.disabled = true;
 
+  shown = true;
   document.getElementById('empty').style.display = 'none';
   const root = document.getElementById('result-root');
   root.style.display = 'flex';
