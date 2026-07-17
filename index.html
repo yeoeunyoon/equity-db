@@ -607,8 +607,7 @@ function stockCtrl() {
     <div>
       <div class="section-label">Step 3 · Pick an analysis</div>
       <div class="query-list" id="qlist"></div>
-    </div>
-    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
+    </div>`;
 }
 function sectorCtrl() {
   return `
@@ -633,8 +632,7 @@ function sectorCtrl() {
     <div>
       <div class="section-label">Step 3 · Pick an analysis</div>
       <div class="query-list" id="qlist"></div>
-    </div>
-    <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
+    </div>`;
 }
 // Retired on the current dataset: s3 (only stale/expired option contracts) and
 // r3 (needs ≥5 quarterly snapshots; the DB has one snapshot per stock).
@@ -1146,11 +1144,18 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape') hideAC();
 });
 document.addEventListener('mousedown', e => {
+  const p = document.getElementById('ac-pop');
   const it = e.target.closest && e.target.closest('.ac-item');
-  if (it) { e.preventDefault(); pickAC(+it.dataset.i); }
-  else if (!(e.target.classList && e.target.classList.contains('ac-input'))) hideAC();
+  if (it) { e.preventDefault(); pickAC(+it.dataset.i); return; }
+  if (p && (e.target === p || p.contains(e.target))) return;   // clicking/dragging inside the popup (e.g. its scrollbar)
+  if (!(e.target.classList && e.target.classList.contains('ac-input'))) hideAC();
 });
-document.addEventListener('scroll', hideAC, true);
+// Hide the popup when the page/sidebar scrolls, but NOT when scrolling the popup's own list.
+document.addEventListener('scroll', e => {
+  const p = document.getElementById('ac-pop');
+  if (p && e.target && e.target.nodeType===1 && (e.target === p || p.contains(e.target))) return;
+  hideAC();
+}, true);
 
 // chart helpers
 const COPTS = {
