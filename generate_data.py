@@ -33,7 +33,7 @@ Usage:
 
 Requirements: pip install -r requirements.txt  (yfinance, pandas, lxml)
 """
-import os, csv, argparse, sys
+import os, csv, argparse, sys, io, urllib.request
 from datetime import date
 
 import yfinance as yf
@@ -125,7 +125,13 @@ def load_constituents():
             "GICS Sector": "sector", "GICS Sub-Industry": "sub_industry"}
     df = None
     try:
-        tables = pd.read_html(SP500_URL)
+        # Wikipedia 403s the default urllib user-agent, so fetch with a
+        # browser-like UA and hand the HTML to read_html.
+        req = urllib.request.Request(SP500_URL, headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"})
+        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8")
+        tables = pd.read_html(io.StringIO(html))
         for t in tables:
             if set(cols).issubset(t.columns):
                 df = t[list(cols)].rename(columns=cols)
