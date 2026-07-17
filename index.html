@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Market Explorer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -107,14 +111,21 @@ tbody tr:hover td { background: #fafafa; }
 .alloc-bar { height: 8px; border-radius: 4px; background: #eef0f2; overflow: hidden; }
 .alloc-fill { height: 100%; background: #2563eb; border-radius: 4px; }
 .alloc-w { text-align: right; font-variant-numeric: tabular-nums; color: #555; }
-.pf-row { display: grid; grid-template-columns: 1fr 66px 66px 26px; gap: 5px; margin-bottom: 5px; }
-.pf-row input { padding: 6px 7px; font-size: 12px; }
+.pf-row { display: grid; grid-template-columns: minmax(0,1fr) 56px 56px 30px; gap: 5px; margin-bottom: 5px; align-items: center; }
+.pf-row input { padding: 6px 7px; font-size: 12px; width: 100%; min-width: 0; }
+.pf-row input[type=number] { -moz-appearance: textfield; }
+.pf-row input[type=number]::-webkit-inner-spin-button, .pf-row input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .pf-row .pf-t { text-transform: uppercase; }
-.pf-del { border: 1px solid var(--line); background: #fff; border-radius: 6px; color: #b91c1c; cursor: pointer; font-size: 14px; line-height: 1; }
-.pf-del:hover { border-color: #fca5a5; }
+.pf-del { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 30px; padding: 0; border: 1px solid var(--line); background: #fff; border-radius: 6px; color: #b91c1c; cursor: pointer; font-size: 16px; line-height: 1; }
+.pf-del:hover { border-color: #fca5a5; background: #fef2f2; }
 .pf-add { margin-top: 4px; font-size: 12px; color: #2563eb; background: none; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 6px 10px; cursor: pointer; width: 100%; }
 .pf-add:hover { border-color: #2563eb; }
+.pf-save { width: 100%; padding: 9px; margin-top: 8px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pf-save:hover { background: #047857; }
 .pf-note { font-size: 11px; color: var(--faint); margin-top: 6px; line-height: 1.4; }
+.pf-note code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: #334155; }
+.pf-note a { color: #2563eb; text-decoration: none; }
+.pf-note a:hover { text-decoration: underline; }
 .ac-pop { position: absolute; z-index: 10000; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); max-height: 260px; overflow-y: auto; display: none; }
 .ac-item { padding: 7px 11px; font-size: 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
 .ac-item b { font-weight: 600; color: var(--ink); }
@@ -175,8 +186,13 @@ tbody tr:hover td { background: #fafafa; }
 let curMode='stock', curQid=null, curData=null, chartInst=null, curRange='1y', shown=false;
 // Portfolio-view state. pfSel is a portfolio_id, or 'custom' for the build-your-own
 // portfolio (persisted in the browser only).
-let pfSel=null, pfList=[], pfCustom=[];
+let pfSel=null, pfList=[], pfCustom=[], pfSavedPid=null, pfOwner='';
 try { pfCustom = JSON.parse(localStorage.getItem('me_pf_custom')||'[]') || []; } catch(e) { pfCustom=[]; }
+try { pfOwner = localStorage.getItem('me_owner') || ''; } catch(e) {}
+if (!pfOwner) {   // a per-browser sync key; user can copy it to another device
+  pfOwner = 'u:' + ((self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'').slice(0,12) : Math.random().toString(36).slice(2,14));
+  try { localStorage.setItem('me_owner', pfOwner); } catch(e) {}
+}
 let SECTORS = ['Technology','Healthcare','Financial Services','Consumer Discretionary',
                'Energy','Industrials','Communication Services','Consumer Staples',
                'Utilities','Real Estate','Materials'];
@@ -192,7 +208,7 @@ const DESC = {
   s3:'Implied volatility of calls vs puts by expiry',
   s4:'Dividends & splits with price 7 days before/after',
   s5:'Total return compared with the S&P 500',
-  s6:'P/E, EPS, beta and market-cap history',
+  s6:'Latest P/E, EPS, beta and market cap',
   r1:'Average return of each sector vs the S&P 500',
   r2:'Valuation (P/E) across industries in the sector',
   r3:'Companies with the longest EPS-growth streaks',
@@ -224,6 +240,18 @@ async function api(q, extra={}) {
   const j = await res.json();
   if (j.error) throw new Error(j.error);
   return j.rows||[];
+}
+
+// POST helper for write endpoints (portfolio save/delete).
+async function apiPost(q, params) {
+  const res = await fetch('api.php?q='+encodeURIComponent(q), {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams(params)
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error);
+  return j;
 }
 
 function hl(s) {
@@ -359,8 +387,8 @@ WHERE sec.ticker = :ticker;`,
       d.map(r=>(r._v??0)>=0?'rgba(5,150,105,.6)':'rgba(220,38,38,.5)'))
   },
 
-  s6: { mode:'stock', label:'Financial snapshot trend', hasChart:true,
-    sql:`-- Q06: P/E, EPS, beta, market cap over time for a given stock
+  s6: { mode:'stock', label:'Fundamentals snapshot', hasChart:false,
+    sql:`-- Q06: latest P/E, EPS, beta and market cap for a given stock
 SELECT fs.snapshot_date, fs.pe_ratio, fs.eps, fs.beta,
   ROUND(fs.market_cap/1e9,2) AS market_cap_b
 FROM Financial_Snapshot fs JOIN Security s ON fs.security_id = s.security_id
@@ -372,11 +400,7 @@ WHERE s.ticker = :ticker ORDER BY fs.snapshot_date;`,
         'EPS':r.eps!=null?'$'+fmt(+r.eps):'-',
         'Beta':r.beta!=null?fmt(+r.beta,3):'-',
         'Mkt Cap ($B)':r.market_cap_b!=null?fmt(+r.market_cap_b):'-'}));
-    },
-    chart: d => line(['P/E','Beta'],
-      [d.map(r=>r['P/E']==='-'?null:+r['P/E'].replace(/,/g,'')),
-       d.map(r=>r.Beta==='-'?null:+r.Beta.replace(/,/g,''))],
-      d.map(r=>r['Snapshot Date']),['#2563eb','#d97706'])
+    }
   },
 
   r1: { mode:'sector', label:'Sector returns vs SPY', hasChart:true,
@@ -612,9 +636,11 @@ function sectorCtrl() {
     </div>
     <button class="run-btn" onclick="runQuery()">Run analysis ▸</button>`;
 }
+// Retired on the current dataset: s3 (only stale/expired option contracts) and
+// r3 (needs ≥5 quarterly snapshots; the DB has one snapshot per stock).
 const MODES = {
-  stock:  {keys:['s1','s2','s3','s4','s5','s6'],           ctrl:stockCtrl},
-  sector: {keys:['r1','r2','r3','r4','r5','r6','r7','r8','r9'], ctrl:sectorCtrl}
+  stock:  {keys:['s1','s2','s4','s5','s6'],               ctrl:stockCtrl},
+  sector: {keys:['r1','r2','r4','r5','r6','r7','r8','r9'], ctrl:sectorCtrl}
 };
 
 function setMode(m) {
@@ -722,7 +748,9 @@ async function runQuery() {
 function renderTable(data) {
   const ta = document.getElementById('tarea');
   if (!data?.length) {
-    ta.innerHTML='<div style="padding:24px;color:#bbb;text-align:center;font-size:12px;">No results.</div>';
+    ta.innerHTML='<div style="padding:32px 24px;color:#999;text-align:center;font-size:13px;">'
+      +'No rows for this analysis on the current data.'
+      +'<br><span style="font-size:12px;color:#bbb;">Try a different ticker, sector, or date range.</span></div>';
     ta.style.display='block'; return;
   }
   const keys = Object.keys(data[0]).filter(k=>!k.startsWith('_'));
@@ -785,11 +813,15 @@ function portfolioCtrl() {
 
 async function loadPortfolios() {
   const sel = document.getElementById('ctrl-pf');
-  try { pfList = await api('portfolios'); } catch(e) { pfList = []; }
+  try { pfList = await api('portfolios', {owner:pfOwner}); } catch(e) { pfList = []; }
   if (!sel) return;
-  const samples = pfList.map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} — sample (${p.holdings})</option>`).join('');
-  sel.innerHTML = `<option value="custom">⭐ My Portfolio (saved in browser)</option>` + samples;
-  // Restore the last-used selection if it's still valid, else default to your own.
+  const mine = pfList.filter(p=>!(+p.is_sample))
+    .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} (${p.holdings})</option>`).join('');
+  const samples = pfList.filter(p=>+p.is_sample)
+    .map(p=>`<option value="${p.portfolio_id}">${p.portfolio_name} — sample (${p.holdings})</option>`).join('');
+  sel.innerHTML = `<option value="custom">⭐ My Portfolio (editor)</option>`
+    + (mine ? `<optgroup label="Saved to my account">${mine}</optgroup>` : '')
+    + `<optgroup label="Sample portfolios">${samples}</optgroup>`;
   let savedSel = null; try { savedSel = localStorage.getItem('me_pf_sel'); } catch(e) {}
   const valid = savedSel && (savedSel==='custom' || pfList.some(p=>String(p.portfolio_id)===savedSel));
   pfSel = valid ? savedSel : 'custom';
@@ -800,6 +832,7 @@ async function loadPortfolios() {
 
 function onPfSelect() {
   pfSel = document.getElementById('ctrl-pf').value;
+  if (pfSel === 'custom') pfSavedPid = null;   // manually opening the editor = a fresh save context
   try { localStorage.setItem('me_pf_sel', pfSel); } catch(e) {}
   renderPfEditor();
   runPortfolio();
@@ -808,15 +841,91 @@ function onPfSelect() {
 function renderPfEditor() {
   const w = document.getElementById('pf-editor-wrap');
   if (!w) return;
-  if (pfSel !== 'custom') { w.innerHTML=''; return; }
-  w.innerHTML = `
-    <div>
-      <div class="section-label">Your holdings</div>
-      <div id="pf-rows"></div>
-      <button class="pf-add" onclick="pfAddRow()">+ Add holding</button>
-      <div class="pf-note">Saved in your browser only. Enter a ticker, share count, and average cost per share, then press “View portfolio”.</div>
-    </div>`;
-  drawPfRows();
+  if (pfSel === 'custom') {
+    const editing = pfSavedPid ? (pfList.find(p=>String(p.portfolio_id)===String(pfSavedPid))||{}).portfolio_name : '';
+    w.innerHTML = `
+      <div>
+        <div class="section-label">Your holdings${editing?` · editing “${editing}”`:''}</div>
+        <div id="pf-rows"></div>
+        <button class="pf-add" onclick="pfAddRow()">+ Add holding</button>
+        <button class="pf-save" onclick="pfSaveServer()">💾 ${pfSavedPid?'Update saved portfolio':'Save to my portfolios'}</button>
+        <div class="pf-note">The editor is kept in this browser. Saving stores it on the server under your sync key <code>${pfOwner}</code>. <a href="#" onclick="pfChangeKey();return false;">Change key</a> to load these on another device.</div>
+      </div>`;
+    drawPfRows();
+    return;
+  }
+  const p = pfList.find(x=>String(x.portfolio_id)===String(pfSel));
+  if (p && !(+p.is_sample)) {   // one of my saved portfolios → offer edit / delete
+    w.innerHTML = `
+      <div>
+        <div class="section-label">Saved portfolio</div>
+        <div style="display:flex;gap:6px;">
+          <button class="pf-add" style="flex:1;margin-top:0;" onclick="pfEditServer(${p.portfolio_id})">✎ Edit</button>
+          <button class="pf-add" style="flex:1;margin-top:0;border-color:#fca5a5;color:#b91c1c;" onclick="pfDeleteServer(${p.portfolio_id})">🗑 Delete</button>
+        </div>
+      </div>`;
+  } else {
+    w.innerHTML = '';   // a sample portfolio: read-only
+  }
+}
+
+async function pfSaveServer() {
+  const spec = pfCustom.filter(h=>h.ticker && +h.shares>0)
+    .map(h=>`${h.ticker.toUpperCase()}:${+h.shares}:${+h.cost||0}`).join(',');
+  if (!spec) { alert('Add at least one holding (ticker + shares) before saving.'); return; }
+  const cur = pfSavedPid ? (pfList.find(p=>String(p.portfolio_id)===String(pfSavedPid))||{}).portfolio_name : '';
+  const name = prompt('Name this portfolio:', cur || 'My Portfolio');
+  if (name === null) return;
+  try {
+    const r = await apiPost('pf_save', {owner:pfOwner, name, holdings:spec, pid:pfSavedPid||0});
+    pfSavedPid = null;
+    await loadPortfolios();
+    pfSel = String(r.pid);
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = pfSel;
+    try { localStorage.setItem('me_pf_sel', pfSel); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not save: '+e.message); }
+}
+
+async function pfEditServer(pid) {
+  try {
+    const rows = await api('pf_holdings', {pid});
+    pfCustom = rows.map(h=>({ticker:h.ticker, shares:+h.shares, cost:+h.avg_cost}));
+    savePfCustom();
+    pfSavedPid = pid;
+    pfSel = 'custom';
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = 'custom';
+    try { localStorage.setItem('me_pf_sel', 'custom'); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not load portfolio: '+e.message); }
+}
+
+async function pfDeleteServer(pid) {
+  if (!confirm('Delete this saved portfolio? This cannot be undone.')) return;
+  try {
+    await apiPost('pf_delete', {owner:pfOwner, pid});
+    if (String(pfSavedPid)===String(pid)) pfSavedPid = null;
+    await loadPortfolios();
+    pfSel = 'custom';
+    const sel = document.getElementById('ctrl-pf'); if (sel) sel.value = 'custom';
+    try { localStorage.setItem('me_pf_sel', 'custom'); } catch(e) {}
+    renderPfEditor();
+    runPortfolio();
+  } catch(e) { alert('Could not delete: '+e.message); }
+}
+
+function pfChangeKey() {
+  const v = prompt('Enter your sync key to load its portfolios on this device.\nAnyone with this key can see these portfolios, so keep it private.', pfOwner);
+  if (v === null) return;
+  let k = v.trim();
+  if (!k) return;
+  if (!k.startsWith('u:')) k = 'u:' + k.replace(/[^A-Za-z0-9_-]/g,'');
+  pfOwner = k;
+  try { localStorage.setItem('me_owner', pfOwner); } catch(e) {}
+  pfSavedPid = null;
+  loadPortfolios();
 }
 
 function drawPfRows() {

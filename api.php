@@ -347,13 +347,21 @@ case 'tickers':
             ORDER BY s.ticker");
     break;
 
-case 'portfolios':
+case 'portfolios': {
+    // Returns the shared sample portfolios plus the requesting owner's own saved
+    // portfolios. User portfolios are identified by a 'u:'-prefixed owner_name,
+    // so one user never sees another user's saved portfolios.
+    $owner = trim($_GET['owner'] ?? '');
     q($db, "SELECT p.portfolio_id, p.portfolio_name, p.owner_name,
+              (p.owner_name NOT LIKE 'u:%') AS is_sample,
               COUNT(h.security_id) AS holdings
             FROM Portfolio p LEFT JOIN Holding h ON h.portfolio_id = p.portfolio_id
+            WHERE p.owner_name NOT LIKE 'u:%' OR p.owner_name = ?
             GROUP BY p.portfolio_id, p.portfolio_name, p.owner_name
-            ORDER BY p.portfolio_id");
+            ORDER BY is_sample DESC, p.portfolio_id",
+       's', [$owner]);
     break;
+}
 
 case 'pf_holdings': {
     $pid  = (int)($_GET['pid'] ?? 0);
@@ -414,6 +422,58 @@ case 'pf_series': {
     $st->bind_param($types, ...$params); $st->execute();
     $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
     echo json_encode(['rows'=>$rows]);
+    break;
+}
+
+case 'pf_save': {
+    // Create or update a user-owned portfolio (owner must be a 'u:' key).
+    $owner = trim($_POST['owner'] ?? '');
+    $name  = trim($_POST['name'] ?? '');
+    $spec  = $_POST['holdings'] ?? '';
+    $pid   = (int)($_POST['pid'] ?? 0);
+    if (strpos($owner, 'u:') !== 0) { echo json_encode(['error'=>'invalid owner']); break; }
+    if ($name === '') $name = 'My Portfolio';
+    $H = pf_get_holdings($db, 0, $spec);
+    if (!$H) { echo json_encode(['error'=>'no valid holdings']); break; }
+    $ref = pf_reference($db, array_keys($H));
+
+    if ($pid > 0) {
+        $chk = $db->prepare("SELECT owner_name FROM Portfolio WHERE portfolio_id = ?");
+        $chk->bind_param('i', $pid); $chk->execute();
+        $row = $chk->get_result()->fetch_assoc(); $chk->close();
+        if (!$row || $row['owner_name'] !== $owner) { echo json_encode(['error'=>'not your portfolio']); break; }
+        $u = $db->prepare("UPDATE Portfolio SET portfolio_name = ? WHERE portfolio_id = ?");
+        $u->bind_param('si', $name, $pid); $u->execute(); $u->close();
+        $d = $db->prepare("DELETE FROM Holding WHERE portfolio_id = ?");
+        $d->bind_param('i', $pid); $d->execute(); $d->close();
+    } else {
+        $ins = $db->prepare("INSERT INTO Portfolio (portfolio_name, owner_name) VALUES (?, ?)");
+        $ins->bind_param('ss', $name, $owner); $ins->execute();
+        $pid = $ins->insert_id; $ins->close();
+    }
+
+    $hi = $db->prepare("INSERT INTO Holding (portfolio_id, security_id, shares, average_cost) VALUES (?, ?, ?, ?)");
+    $saved = 0;
+    foreach ($H as $t => $h) {
+        if (!isset($ref[$t]) || $ref[$t]['security_id'] === null) continue;
+        $sh = (float)$h['shares']; if ($sh <= 0) continue;
+        $sid = (int)$ref[$t]['security_id']; $co = (float)max(0, $h['cost']);
+        $hi->bind_param('iidd', $pid, $sid, $sh, $co); $hi->execute(); $saved++;
+    }
+    $hi->close();
+    echo json_encode(['ok'=>true, 'pid'=>$pid, 'saved'=>$saved]);
+    break;
+}
+
+case 'pf_delete': {
+    $owner = trim($_POST['owner'] ?? '');
+    $pid   = (int)($_POST['pid'] ?? 0);
+    if (strpos($owner, 'u:') !== 0 || $pid <= 0) { echo json_encode(['error'=>'bad request']); break; }
+    // Ownership enforced in WHERE; Holding rows cascade via the FK.
+    $d = $db->prepare("DELETE FROM Portfolio WHERE portfolio_id = ? AND owner_name = ?");
+    $d->bind_param('is', $pid, $owner); $d->execute();
+    $aff = $d->affected_rows; $d->close();
+    echo json_encode(['ok'=>true, 'deleted'=>$aff]);
     break;
 }
 
