@@ -29,7 +29,7 @@ generate() {  # generate <mode>
 
 run_reload() {
   log "reloading MySQL from data/*.tsv ..."
-  mysql --host="$DB_HOST" --user=root --password="$MYSQL_ROOT_PASSWORD" \
+  mysql --skip-ssl --host="$DB_HOST" --user=root --password="$MYSQL_ROOT_PASSWORD" \
         "$DB_NAME" < "$RELOAD_SQL"
 }
 
@@ -51,7 +51,7 @@ seconds_until() {
 }
 
 log "waiting for MySQL at $DB_HOST ..."
-until mysqladmin ping --host="$DB_HOST" --user=root \
+until mysqladmin ping --skip-ssl --host="$DB_HOST" --user=root \
         --password="$MYSQL_ROOT_PASSWORD" --silent 2>/dev/null; do
   sleep 3
 done
